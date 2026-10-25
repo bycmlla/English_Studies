@@ -203,10 +203,45 @@ main:focus {
 }
 
 /* ---------- layout ---------- */
+/* Capa em largura total (como no Notion) e ícone da página sobreposto a ela */
+.cover {
+  display: block;
+  width: 100%;
+  height: clamp(90px, 11vw, 160px);
+  overflow: hidden;
+  background: #f9e4ee;
+}
+
+.cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 55%;
+}
+
+/* Desktop: capa um pouco mais alta (no celular continua fina) */
+@media (min-width: 721px) {
+  .cover {
+    height: clamp(140px, 14vw, 200px);
+  }
+}
+
 .page {
   max-width: 780px;
   margin: 0 auto;
-  padding: 56px 20px 112px;
+  padding: 0 20px 112px;
+}
+
+.page-icon {
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin-top: -38px;
+  margin-bottom: 14px;
+  object-fit: contain;
+  position: relative;
+  image-rendering: pixelated;
 }
 
 .page-header {
@@ -225,10 +260,6 @@ main:focus {
   line-height: 1.15;
   letter-spacing: -0.025em;
   font-weight: 700;
-}
-
-.title-emoji {
-  font-size: 0.9em;
 }
 
 .subtitle {
@@ -841,6 +872,13 @@ main:focus {
   box-shadow: var(--shadow);
 }
 
+.login-icon {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
 .login-title {
   font-size: 1.7rem;
   letter-spacing: -0.02em;
@@ -1067,7 +1105,13 @@ dialog.modal[open] {
 
 @media (max-width: 560px) {
   .page {
-    padding: 28px 16px 96px;
+    padding: 0 16px 96px;
+  }
+
+  .page-icon {
+    width: 64px;
+    height: 64px;
+    margin-top: -34px;
   }
 
   .page-header {

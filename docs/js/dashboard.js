@@ -167,7 +167,7 @@ export function renderDashboard(root, { session, onLogout, onDataChanged }) {
     h(
       'div',
       { class: 'titles' },
-      h('h1', {}, h('span', { class: 'title-emoji', 'aria-hidden': 'true' }, '📚'), 'My English Journey'),
+      h('h1', {}, 'My English Journey'),
       h('p', { class: 'subtitle' }, 'Meu painel de estudos de inglês'),
     ),
     h(
@@ -187,12 +187,25 @@ export function renderDashboard(root, { session, onLogout, onDataChanged }) {
     cards.forEach((card) => card.update());
   }
 
+  // Capa em largura total + ícone da página sobreposto, como em uma página do Notion.
   const main = h(
     'main',
-    { id: 'main', class: 'page', tabindex: '-1' },
-    header,
-    overviewView.el,
-    h('section', { class: 'books', 'aria-label': 'Livros da coleção Interchange' }, cards.map((card) => card.el)),
+    { id: 'main', tabindex: '-1' },
+    h(
+      'picture',
+      { class: 'cover' },
+      // Desktop: capa larga; celular (até 720px): capa estreita.
+      h('source', { media: '(min-width: 721px)', srcset: 'cover_desktop.png' }),
+      h('img', { src: 'cover.jpg', alt: '', width: 736, height: 149, decoding: 'async' }),
+    ),
+    h(
+      'div',
+      { class: 'page' },
+      h('img', { class: 'page-icon', src: 'book.png', alt: '', width: 330, height: 326 }),
+      header,
+      overviewView.el,
+      h('section', { class: 'books', 'aria-label': 'Livros da coleção Interchange' }, cards.map((card) => card.el)),
+    ),
   );
 
   root.replaceChildren(main);

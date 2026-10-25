@@ -61,7 +61,8 @@ export function renderLogin(root, { message = '', onSuccess }) {
         }
       },
     },
-    h('h1', { class: 'login-title' }, h('span', { 'aria-hidden': 'true' }, '📚 '), 'My English Journey'),
+    h('img', { class: 'login-icon', src: 'book.png', alt: '', width: 330, height: 326 }),
+    h('h1', { class: 'login-title' }, 'My English Journey'),
     h('p', { class: 'subtitle' }, 'Meu painel de estudos de inglês'),
     h('div', { class: 'field' }, h('label', { for: 'login-email' }, 'E-mail'), emailInput),
     h('div', { class: 'field' }, h('label', { for: 'login-password' }, 'Senha'), passwordInput),
