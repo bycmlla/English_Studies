@@ -31,35 +31,66 @@ test('getStatus: não iniciado, estudando e concluído', () => {
   assert.equal(getStatus(16), STATUS.COMPLETED);
 });
 
-const book = (slug, completedUnits, lastActivityAt = null) => ({
+const { summarizeBookProgress } = require('../src/services/progress');
+
+const range = (n) => Array.from({ length: n }, (_, i) => i + 1);
+const book = (slug, sb, wb = 0, lastActivityAt = null) => ({
   slug,
   title: slug,
   level: 'A1',
-  totalUnits: 16,
-  completedUnits,
-  status: getStatus(completedUnits),
   lastActivityAt,
+  ...summarizeBookProgress({ studentBook: range(sb), workbook: range(wb) }),
 });
 
-test('summarizeOverall: soma os quatro livros (64 unidades)', () => {
-  const overview = summarizeOverall([book('intro', 16), book('a', 8), book('b', 4), book('c', 0)]);
+test('summarizeBookProgress: 32 conclusões possíveis (16 Student\'s Book + 16 Workbook)', () => {
+  const empty = summarizeBookProgress({});
+  assert.equal(empty.totalTasks, 32);
+  assert.equal(empty.completedTasks, 0);
+  assert.equal(empty.status, STATUS.NOT_STARTED);
+
+  const only = summarizeBookProgress({ studentBook: range(16) });
+  assert.equal(only.studentBook.percent, 100);
+  assert.equal(only.workbook.percent, 0);
+  assert.equal(only.percent, 50);
+  assert.equal(only.status, STATUS.STUDYING);
+  assert.equal(only.fullyCompletedUnits, 0);
+
+  const all = summarizeBookProgress({ studentBook: range(16), workbook: range(16) });
+  assert.equal(all.percent, 100);
+  assert.equal(all.status, STATUS.COMPLETED);
+  assert.equal(all.fullyCompletedUnits, 16);
+});
+
+test('summarizeBookProgress: unidade completa = interseção dos dois materiais', () => {
+  const r = summarizeBookProgress({ studentBook: [1, 2, 3, 5], workbook: [2, 3, 4] });
+  assert.deepEqual(r.fullyCompletedUnitNumbers, [2, 3]);
+  assert.equal(r.completedTasks, 7);
+  assert.equal(r.percent, 21.88); // 7 / 32
+  assert.equal(r.studentBook.percent, 25);
+  assert.equal(r.workbook.percent, 18.75);
+});
+
+test('summarizeOverall: soma os quatro livros (64 unidades, 128 conclusões)', () => {
+  const overview = summarizeOverall([book('intro', 16, 16), book('a', 8, 4), book('b', 4, 0), book('c', 0)]);
   assert.equal(overview.totalUnits, 64);
-  assert.equal(overview.completedUnits, 28);
-  assert.equal(overview.percent, 43.75);
+  assert.equal(overview.totalTasks, 128);
+  assert.equal(overview.completedUnits, 16 + 4); // intro (16) + livro "a" (4 com os dois)
+  assert.equal(overview.completedTasks, 32 + 12 + 4);
+  assert.equal(overview.percent, 37.5); // 48 / 128
   assert.equal(overview.status, STATUS.STUDYING);
 });
 
 test('pickCurrentBook: prefere o livro em andamento com atividade mais recente', () => {
   const books = [
-    book('intro', 16, '2026-01-01T00:00:00Z'),
-    book('a', 3, '2026-02-01T00:00:00Z'),
-    book('b', 5, '2026-03-01T00:00:00Z'),
+    book('intro', 16, 16, '2026-01-01T00:00:00Z'),
+    book('a', 3, 0, '2026-02-01T00:00:00Z'),
+    book('b', 0, 5, '2026-03-01T00:00:00Z'),
     book('c', 0),
   ];
   assert.equal(pickCurrentBook(books).slug, 'b');
 });
 
 test('pickCurrentBook: sem livro em andamento, usa o primeiro não concluído; tudo concluído → null', () => {
-  assert.equal(pickCurrentBook([book('intro', 16), book('a', 0), book('b', 0)]).slug, 'a');
-  assert.equal(pickCurrentBook([book('intro', 16), book('a', 16)]), null);
+  assert.equal(pickCurrentBook([book('intro', 16, 16), book('a', 0), book('b', 0)]).slug, 'a');
+  assert.equal(pickCurrentBook([book('intro', 16, 16), book('a', 16, 16)]), null);
 });

@@ -1,8 +1,17 @@
 // Regras de progresso (funções puras). Espelham backend/src/services/progress.js:
 // o servidor é a fonte oficial, mas o cálculo local deixa a interface instantânea
-// ao marcar/desmarcar uma unidade, antes da resposta da API.
+// ao marcar/desmarcar uma atividade, antes da resposta da API.
+//
+// Cada unidade tem duas atividades acompanhadas: Student's Book e Workbook.
+// Um nível tem 16 unidades × 2 = 32 conclusões possíveis.
 
 export const UNITS_PER_BOOK = 16;
+export const BOOK_TYPES = Object.freeze(['student_book', 'workbook']);
+
+export const BOOK_TYPE_LABEL = Object.freeze({
+  student_book: "Student's Book",
+  workbook: 'Workbook',
+});
 
 export const STATUS = Object.freeze({
   NOT_STARTED: 'not_started',
@@ -23,6 +32,43 @@ export function getStatus(completed, total = UNITS_PER_BOOK) {
   return STATUS.STUDYING;
 }
 
+function summarizeMaterial(numbers, totalUnits) {
+  const completedUnitNumbers = [...new Set(numbers)].sort((a, b) => a - b);
+  return {
+    completed: completedUnitNumbers.length,
+    total: totalUnits,
+    percent: calculatePercent(completedUnitNumbers.length, totalUnits),
+    completedUnitNumbers,
+  };
+}
+
+/**
+ * Progresso de um nível a partir das unidades concluídas de cada material.
+ * Percentual e status do nível consideram as duas partes (32 conclusões);
+ * uma unidade só é "completa" com Student's Book e Workbook concluídos.
+ */
+export function summarizeBookProgress({ studentBook = [], workbook = [] }, totalUnits = UNITS_PER_BOOK) {
+  const sb = summarizeMaterial(studentBook, totalUnits);
+  const wb = summarizeMaterial(workbook, totalUnits);
+  const workbookSet = new Set(wb.completedUnitNumbers);
+  const fullyCompletedUnitNumbers = sb.completedUnitNumbers.filter((n) => workbookSet.has(n));
+
+  const totalTasks = totalUnits * BOOK_TYPES.length;
+  const completedTasks = sb.completed + wb.completed;
+
+  return {
+    totalUnits,
+    studentBook: sb,
+    workbook: wb,
+    fullyCompletedUnits: fullyCompletedUnitNumbers.length,
+    fullyCompletedUnitNumbers,
+    totalTasks,
+    completedTasks,
+    percent: calculatePercent(completedTasks, totalTasks),
+    status: getStatus(completedTasks, totalTasks),
+  };
+}
+
 /** Livro em andamento com atividade mais recente; senão o primeiro não concluído; senão null. */
 export function pickCurrentBook(books) {
   const studying = books.filter((book) => book.status === STATUS.STUDYING);
@@ -38,11 +84,15 @@ export function pickCurrentBook(books) {
 
 export function summarizeOverall(books) {
   const totalUnits = books.reduce((sum, book) => sum + book.totalUnits, 0);
-  const completedUnits = books.reduce((sum, book) => sum + book.completedUnits, 0);
+  const completedUnits = books.reduce((sum, book) => sum + book.fullyCompletedUnits, 0);
+  const totalTasks = books.reduce((sum, book) => sum + book.totalTasks, 0);
+  const completedTasks = books.reduce((sum, book) => sum + book.completedTasks, 0);
   return {
     totalUnits,
-    completedUnits,
-    percent: calculatePercent(completedUnits, totalUnits),
+    completedUnits, // unidades com Student's Book e Workbook concluídos
+    totalTasks,
+    completedTasks,
+    percent: calculatePercent(completedTasks, totalTasks),
     currentBook: pickCurrentBook(books),
   };
 }

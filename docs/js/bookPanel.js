@@ -1,63 +1,125 @@
-// Conteúdo expandido de um livro: unidades, Study Materials e anotações.
+// Conteúdo expandido de um livro: progresso por material, unidades e Study Materials.
 import * as api from './api.js';
-import { h, icon, unitLabel, safeUrl, formatTime } from './dom.js';
-import { getBook, toggleUnit, subscribe } from './store.js';
+import { h, icon, unitLabel, safeUrl, formatPercent } from './dom.js';
+import { BOOK_TYPE_LABEL } from './progress.js';
+import { getBook, viewOf, toggleUnit, subscribe } from './store.js';
 import { track } from './sync.js';
 import { toast, modal, confirmDialog } from './ui.js';
 
-const MATERIAL_KINDS = [
-  { kind: 'student_book', label: "Student's Book" },
-  { kind: 'workbook', label: 'Workbook' },
-  { kind: 'audio', label: 'Audio Materials' },
-];
-
-const NOTES_AUTOSAVE_MS = 1000;
-const dirtyNotes = new Set(); // slugs com anotações ainda não salvas
-export const hasUnsavedNotes = () => dirtyNotes.size > 0;
+// Só este grupo aparece na interface. A chave interna `student_book` é mantida (banco/API/backups);
+// a API ainda aceita `workbook` e `audio`, mas a tela não os exibe.
+const MATERIAL_KINDS = [{ kind: 'student_book', label: 'Important links' }];
 
 // ---------- unidades ----------
 
-function unitsSection(slug) {
-  const book = getBook(slug);
-  const inputs = new Map();
+/** Bloco de progresso de um material (Student's Book ou Workbook): título, %, barra e contagem. */
+function progressBlock(label) {
+  const percent = h('span', { class: 'mp-pct' });
+  const count = h('span', { class: 'mp-count' });
+  const fill = h('div', { class: 'progress-fill' });
+  const bar = h(
+    'div',
+    { class: 'progress progress-mid', role: 'progressbar', 'aria-label': `Progresso do ${label}`, 'aria-valuemin': 0, 'aria-valuemax': 100 },
+    fill,
+  );
+  const el = h('div', { class: 'mp' }, h('div', { class: 'mp-head' }, h('h4', { class: 'mp-title' }, label), percent), bar, count);
 
-  const grid = h('ul', { class: 'units', 'aria-label': `Unidades de ${book.title}` });
+  return {
+    el,
+    update(summary) {
+      percent.textContent = formatPercent(summary.percent);
+      count.textContent = `${summary.completed} de ${summary.total} unidades`;
+      fill.style.setProperty('--value', `${summary.percent}%`);
+      bar.setAttribute('aria-valuenow', String(summary.percent));
+      bar.setAttribute('aria-valuetext', `${formatPercent(summary.percent)} concluído`);
+    },
+  };
+}
+
+/**
+ * Duas seções: progresso por material (cada um com barra e porcentagem) e a lista de
+ * unidades com um checkbox para o Student's Book e outro para o Workbook.
+ * Uma unidade só aparece como "Completa" quando os dois estão concluídos.
+ */
+function unitsSections(slug) {
+  const book = getBook(slug);
+  const inputs = new Map(); // `${bookType}:${number}` -> <input>
+  const rowEls = new Map(); // number -> { row, badge }
+
+  const blocks = {
+    student_book: progressBlock(BOOK_TYPE_LABEL.student_book),
+    workbook: progressBlock(BOOK_TYPE_LABEL.workbook),
+  };
+  const fullyLine = h('p', { class: 'muted full-line', role: 'status' });
+
+  const list = h('ul', { class: 'unit-rows', 'aria-label': `Unidades de ${book.title}` });
   for (let number = 1; number <= book.totalUnits; number += 1) {
-    const input = h('input', {
-      type: 'checkbox',
-      checked: book.done.has(number),
-      'aria-label': `${unitLabel(number)} de ${book.title}`,
-      onChange: () => {
-        const wanted = input.checked;
-        toggleUnit(slug, number, wanted, {
-          onFailure: (error, retry) =>
-            toast(`Não foi possível salvar ${unitLabel(number)}. ${error.message}`, {
-              type: 'error',
-              actionLabel: 'Tentar novamente',
-              onAction: retry,
-            }),
-        });
-      },
-    });
-    inputs.set(number, input);
-    grid.append(
-      h('li', {}, h('label', { class: 'unit' }, input, h('span', { class: 'box', 'aria-hidden': 'true' }), h('span', {}, unitLabel(number)))),
-    );
+    const toggle = (bookType) => {
+      const label = BOOK_TYPE_LABEL[bookType];
+      const input = h('input', {
+        type: 'checkbox',
+        checked: book.done[bookType].has(number),
+        'aria-label': `${unitLabel(number)}: ${label} concluído`,
+        onChange: () => {
+          toggleUnit(slug, number, bookType, input.checked, {
+            onFailure: (error, retry) =>
+              toast(`Não foi possível salvar ${unitLabel(number)} (${label}). ${error.message}`, {
+                type: 'error',
+                actionLabel: 'Tentar novamente',
+                onAction: retry,
+              }),
+          });
+        },
+      });
+      inputs.set(`${bookType}:${number}`, input);
+      return h('label', { class: 'unit' }, input, h('span', { class: 'box', 'aria-hidden': 'true' }), h('span', {}, label));
+    };
+
+    const badge = h('span', { class: 'unit-badge' });
+    const row = h('li', { class: 'unit-row' }, h('span', { class: 'unit-name' }, unitLabel(number)), toggle('student_book'), toggle('workbook'), badge);
+    rowEls.set(number, { row, badge });
+    list.append(row);
   }
 
-  // Mantém as caixas fiéis ao estado do store (reverte falhas, aplica mudanças de outro dispositivo).
-  subscribe((event) => {
-    if (event.type === 'reload' || (event.type === 'book' && event.slug === slug)) {
-      const current = getBook(slug);
-      if (!current) return;
-      for (const [number, input] of inputs) {
-        const done = current.done.has(number);
+  // Redesenha a partir do store: reverte falhas, aplica mudanças de outro dispositivo.
+  function refresh() {
+    const current = getBook(slug);
+    if (!current) return;
+    const view = viewOf(current);
+
+    blocks.student_book.update(view.studentBook);
+    blocks.workbook.update(view.workbook);
+    fullyLine.textContent = `${view.fullyCompletedUnits} de ${view.totalUnits} unidades 100% concluídas (Student's Book + Workbook).`;
+
+    for (const [number, { row, badge }] of rowEls) {
+      const sb = current.done.student_book.has(number);
+      const wb = current.done.workbook.has(number);
+      for (const [bookType, done] of [['student_book', sb], ['workbook', wb]]) {
+        const input = inputs.get(`${bookType}:${number}`);
         if (input.checked !== done) input.checked = done;
       }
+      const complete = sb && wb;
+      row.classList.toggle('is-complete', complete);
+      badge.dataset.state = complete ? 'complete' : sb || wb ? 'partial' : 'none';
+      badge.textContent = complete ? 'Completa' : `${Number(sb) + Number(wb)}/2`;
     }
-  });
+  }
 
-  return h('section', { class: 'panel-section' }, h('h3', { class: 'section-title' }, 'Unidades'), grid);
+  subscribe((event) => {
+    if (event.type === 'reload' || (event.type === 'book' && event.slug === slug)) refresh();
+  });
+  refresh();
+
+  return [
+    h(
+      'section',
+      { class: 'panel-section' },
+      h('h3', { class: 'section-title' }, 'Progresso por material'),
+      h('div', { class: 'material-progress' }, blocks.student_book.el, blocks.workbook.el),
+      fullyLine,
+    ),
+    h('section', { class: 'panel-section' }, h('h3', { class: 'section-title' }, 'Unidades'), list),
+  ];
 }
 
 // ---------- study materials ----------
@@ -215,85 +277,7 @@ function materialsSection(slug) {
   return section;
 }
 
-// ---------- anotações ----------
-
-function notesSection(slug) {
-  const status = h('span', { class: 'note-status', role: 'status', 'aria-live': 'polite' }, 'Carregando…');
-  const retry = h('button', { class: 'btn btn-small', type: 'button', hidden: true }, 'Tentar novamente');
-  const textarea = h('textarea', {
-    id: `notes-${slug}`, class: 'input notes', rows: 6, maxlength: 20000, disabled: true,
-    placeholder: 'Escreva aqui suas anotações sobre este livro…',
-  });
-
-  let timer = null;
-  let saving = false;
-  let lastSaved = '';
-
-  const setStatus = (text, { error = false, canRetry = false } = {}) => {
-    status.textContent = text;
-    status.classList.toggle('is-error', error);
-    retry.hidden = !canRetry;
-  };
-
-  async function save() {
-    clearTimeout(timer);
-    if (saving) return;
-    const text = textarea.value;
-    if (text === lastSaved) { dirtyNotes.delete(slug); return; }
-    saving = true;
-    setStatus('Salvando…');
-    try {
-      const saved = await track(api.saveNotes(slug, text));
-      lastSaved = text;
-      if (textarea.value === text) {
-        dirtyNotes.delete(slug);
-        setStatus(`Salvo ${formatTime(saved.updatedAt)}`);
-      }
-    } catch (err) {
-      setStatus(`Não salvo: ${err.message}`, { error: true, canRetry: true });
-      saving = false;
-      return;
-    }
-    saving = false;
-    if (textarea.value !== lastSaved) timer = setTimeout(save, NOTES_AUTOSAVE_MS);
-  }
-
-  let retryAction = save;
-  retry.addEventListener('click', () => retryAction());
-  textarea.addEventListener('input', () => {
-    dirtyNotes.add(slug);
-    setStatus('Alterações não salvas…');
-    clearTimeout(timer);
-    timer = setTimeout(save, NOTES_AUTOSAVE_MS);
-  });
-  textarea.addEventListener('blur', save);
-
-  async function load() {
-    setStatus('Carregando…');
-    try {
-      const notes = await api.getNotes(slug);
-      textarea.value = notes.content;
-      lastSaved = notes.content;
-      textarea.disabled = false;
-      retryAction = save;
-      setStatus(notes.updatedAt ? `Última atualização ${formatTime(notes.updatedAt)}` : 'As anotações são salvas automaticamente.');
-    } catch (err) {
-      retryAction = load;
-      setStatus(`Não foi possível carregar as anotações. ${err.message}`, { error: true, canRetry: true });
-    }
-  }
-
-  load();
-  return h(
-    'section',
-    { class: 'panel-section' },
-    h('h3', { class: 'section-title' }, h('label', { for: textarea.id }, 'Anotações')),
-    textarea,
-    h('div', { class: 'note-footer' }, status, retry),
-  );
-}
-
-/** Monta o painel de um livro. Carrega materiais e anotações apenas quando é criado (1ª abertura). */
+/** Monta o painel de um livro. Carrega os materiais apenas quando é criado (1ª abertura). */
 export function createBookPanel(slug) {
-  return h('div', { class: 'panel-content' }, unitsSection(slug), materialsSection(slug), notesSection(slug));
+  return h('div', { class: 'panel-content' }, unitsSections(slug), materialsSection(slug));
 }

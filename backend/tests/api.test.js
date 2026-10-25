@@ -18,8 +18,8 @@ async function setup(overrides) {
   return { ...ctx, token, auth, get, put, post, del };
 }
 
-async function toggle(t, slug, number, completed = true) {
-  const res = await t.put(`/api/books/${slug}/units/${number}`, { completed });
+async function toggle(t, slug, number, completed = true, bookType = 'student_book') {
+  const res = await t.put(`/api/books/${slug}/units/${number}`, { completed, bookType });
   assert.equal(res.status, 200, JSON.stringify(res.body));
   return res.body;
 }
@@ -180,41 +180,103 @@ test('GET /api/books lista os 4 livros com 16 unidades e progresso zerado', asyn
   assert.deepEqual(res.body.books.map((b) => b.color), ['yellow', 'red', 'blue', 'green']);
   for (const book of res.body.books) {
     assert.equal(book.totalUnits, 16);
-    assert.equal(book.completedUnits, 0);
+    assert.equal(book.totalTasks, 32, '16 do Student\'s Book + 16 do Workbook');
+    assert.equal(book.completedTasks, 0);
+    assert.equal(book.fullyCompletedUnits, 0);
+    assert.equal(book.studentBook.total, 16);
+    assert.equal(book.workbook.total, 16);
     assert.equal(book.percent, 0);
     assert.equal(book.status, 'not_started');
   }
 });
 
-test('marcar unidades recalcula porcentagem e status em cada um dos 4 livros', async () => {
+test('Student\'s Book e Workbook têm progresso próprio; o nível soma as duas partes (32 conclusões) nos 4 livros', async () => {
   const t = await setup();
   const steps = [
-    [1, 6.25, 'studying'],
-    [4, 25, 'studying'],
-    [8, 50, 'studying'],
-    [12, 75, 'studying'],
-    [16, 100, 'completed'],
+    [1, 6.25],
+    [4, 25],
+    [8, 50],
+    [12, 75],
+    [16, 100],
   ];
 
   for (const slug of SLUGS) {
+    // Student's Book: 0 -> 16. O nível chega a 50 % e continua "estudando".
     let done = 0;
-    for (const [target, percent, status] of steps) {
-      while (done < target) {
-        done += 1;
-        await toggle(t, slug, done);
-      }
-      const { body } = await t.get(`/api/books/${slug}`);
-      assert.equal(body.book.completedUnits, target, `${slug} ${target}`);
-      assert.equal(body.book.percent, percent, `${slug} ${target}`);
-      assert.equal(body.book.status, status, `${slug} ${target}`);
+    for (const [target, percent] of steps) {
+      while (done < target) await toggle(t, slug, (done += 1), true, 'student_book');
+      const { book } = (await t.get(`/api/books/${slug}`)).body;
+      assert.equal(book.studentBook.completed, target, `${slug} SB ${target}`);
+      assert.equal(book.studentBook.percent, percent, `${slug} SB ${target}`);
+      assert.equal(book.workbook.completed, 0, 'o Workbook não é afetado');
+      assert.equal(book.completedTasks, target);
+      assert.equal(book.percent, Math.round((percent / 2) * 100) / 100, `${slug}: nível = tarefas / 32`);
+      assert.equal(book.fullyCompletedUnits, 0, 'sem Workbook nenhuma unidade está 100 %');
+      assert.equal(book.status, 'studying');
     }
+    assert.equal((await t.get(`/api/books/${slug}`)).body.book.percent, 50);
+
+    // Workbook: 0 -> 16. Ao final, o nível está 100 % concluído.
+    done = 0;
+    for (const [target, percent] of steps) {
+      while (done < target) await toggle(t, slug, (done += 1), true, 'workbook');
+      const { book } = (await t.get(`/api/books/${slug}`)).body;
+      assert.equal(book.workbook.completed, target, `${slug} WB ${target}`);
+      assert.equal(book.workbook.percent, percent, `${slug} WB ${target}`);
+      assert.equal(book.studentBook.completed, 16, 'o Student\'s Book não é afetado');
+      assert.equal(book.completedTasks, 16 + target);
+      assert.equal(book.fullyCompletedUnits, target);
+      assert.equal(book.status, target === 16 ? 'completed' : 'studying');
+    }
+    assert.equal((await t.get(`/api/books/${slug}`)).body.book.percent, 100);
   }
 
   const overview = (await t.get('/api/progress/overview')).body.overview;
   assert.equal(overview.totalUnits, 64);
   assert.equal(overview.completedUnits, 64);
+  assert.equal(overview.totalTasks, 128);
+  assert.equal(overview.completedTasks, 128);
   assert.equal(overview.percent, 100);
   assert.equal(overview.currentBook, null);
+});
+
+test('uma unidade só é completa quando Student\'s Book e Workbook estão concluídos', async () => {
+  const t = await setup();
+
+  await toggle(t, 'intro', 3, true, 'student_book');
+  let units = (await t.get('/api/books/intro/units')).body.units;
+  assert.equal(units[2].studentBook.completed, true);
+  assert.equal(units[2].workbook.completed, false);
+  assert.equal(units[2].completed, false);
+  assert.equal((await t.get('/api/books/intro')).body.book.fullyCompletedUnits, 0);
+
+  const both = await toggle(t, 'intro', 3, true, 'workbook');
+  assert.equal(both.unit.bookType, 'workbook');
+  assert.deepEqual(both.book.fullyCompletedUnitNumbers, [3]);
+  assert.equal(both.book.fullyCompletedUnits, 1);
+  units = (await t.get('/api/books/intro/units')).body.units;
+  assert.equal(units[2].completed, true);
+
+  // Desmarcar só o Workbook tira a unidade de "completa" sem mexer no Student's Book.
+  const after = await toggle(t, 'intro', 3, false, 'workbook');
+  assert.equal(after.book.fullyCompletedUnits, 0);
+  assert.deepEqual(after.book.studentBook.completedUnitNumbers, [3]);
+  assert.deepEqual(after.book.workbook.completedUnitNumbers, []);
+});
+
+test('bookType é opcional (padrão student_book) e rejeita valores inválidos', async () => {
+  const t = await setup();
+  const legacy = await t.put('/api/books/intro/units/1', { completed: true }); // clientes antigos
+  assert.equal(legacy.status, 200);
+  assert.equal(legacy.body.unit.bookType, 'student_book');
+  assert.equal(legacy.body.book.studentBook.completed, 1);
+  assert.equal(legacy.body.book.workbook.completed, 0);
+
+  for (const bookType of ['audio', 'Workbook', 1, '']) {
+    const res = await t.put('/api/books/intro/units/2', { completed: true, bookType });
+    assert.equal(res.status, 400, JSON.stringify(bookType));
+    assert.equal(res.body.error.code, 'VALIDATION_ERROR');
+  }
 });
 
 test('marcar e desmarcar uma unidade; a resposta já traz o progresso atualizado', async () => {
@@ -222,13 +284,14 @@ test('marcar e desmarcar uma unidade; a resposta já traz o progresso atualizado
 
   const checked = await toggle(t, 'intro', 1, true);
   assert.equal(checked.unit.completed, true);
-  assert.equal(checked.book.completedUnits, 1);
-  assert.equal(checked.book.percent, 6.25);
-  assert.deepEqual(checked.book.completedUnitNumbers, [1]);
+  assert.equal(checked.book.studentBook.completed, 1);
+  assert.equal(checked.book.studentBook.percent, 6.25);
+  assert.equal(checked.book.percent, 3.13, '1 de 32 conclusões');
+  assert.deepEqual(checked.book.studentBook.completedUnitNumbers, [1]);
 
   const unchecked = await toggle(t, 'intro', 1, false);
   assert.equal(unchecked.unit.completed, false);
-  assert.equal(unchecked.book.completedUnits, 0);
+  assert.equal(unchecked.book.completedTasks, 0);
   assert.equal(unchecked.book.status, 'not_started');
 });
 
@@ -238,24 +301,28 @@ test('marcar a mesma unidade duas vezes é idempotente (sem duplicar registros)'
   await toggle(t, 'intro', 3);
   const { rows } = await t.pool.query('SELECT COUNT(*) AS total FROM unit_progress');
   assert.equal(Number(rows[0].total), 1);
-  assert.equal((await t.get('/api/books/intro')).body.book.completedUnits, 1);
+  assert.equal((await t.get('/api/books/intro')).body.book.studentBook.completed, 1);
 });
 
 test('persistência: o progresso vem do banco, inclusive após novo login', async () => {
   const t = await setup();
   await toggle(t, 'interchange-2', 5);
   await toggle(t, 'interchange-2', 9);
+  await toggle(t, 'interchange-2', 9, true, 'workbook');
 
   const { rows } = await t.pool.query(
-    'SELECT u.number FROM unit_progress up JOIN units u ON u.id = up.unit_id WHERE up.completed = true ORDER BY u.number',
+    'SELECT u.number, up.book_type FROM unit_progress up JOIN units u ON u.id = up.unit_id WHERE up.completed = true ORDER BY up.book_type, u.number',
   );
-  assert.deepEqual(rows.map((r) => r.number), [5, 9]);
+  assert.deepEqual(rows.map((r) => [r.number, r.book_type]), [[5, 'student_book'], [9, 'student_book'], [9, 'workbook']]);
 
   // "Outro dispositivo": novo login, novo token.
   const otherToken = await loginToken(t.agent);
   const res = await t.agent.get('/api/books/interchange-2/units').set('Authorization', `Bearer ${otherToken}`);
-  const doneNumbers = res.body.units.filter((u) => u.completed).map((u) => u.number);
-  assert.deepEqual(doneNumbers, [5, 9]);
+  const sb = res.body.units.filter((u) => u.studentBook.completed).map((u) => u.number);
+  const wb = res.body.units.filter((u) => u.workbook.completed).map((u) => u.number);
+  assert.deepEqual(sb, [5, 9]);
+  assert.deepEqual(wb, [9]);
+  assert.deepEqual(res.body.units.filter((u) => u.completed).map((u) => u.number), [9], 'só a 9 tem os dois');
   assert.equal(res.body.units.length, 16);
   assert.equal(res.body.units[0].label, 'Unit 01');
   assert.equal(res.body.units[15].label, 'Unit 16');
@@ -281,21 +348,26 @@ test('corpo inválido ao marcar unidade devolve 400', async () => {
   }
 });
 
-test('visão geral: total 64, porcentagem geral e livro atual', async () => {
+test('visão geral: total 64, porcentagem geral (128 conclusões) e livro atual', async () => {
   const t = await setup();
 
   let overview = (await t.get('/api/progress/overview')).body.overview;
   assert.equal(overview.totalUnits, 64);
+  assert.equal(overview.totalTasks, 128);
   assert.equal(overview.completedUnits, 0);
   assert.equal(overview.percent, 0);
   assert.equal(overview.currentBook.slug, 'intro');
 
-  for (let n = 1; n <= 16; n += 1) await toggle(t, 'intro', n);
+  for (let n = 1; n <= 16; n += 1) {
+    await toggle(t, 'intro', n, true, 'student_book');
+    await toggle(t, 'intro', n, true, 'workbook');
+  }
   for (let n = 1; n <= 4; n += 1) await toggle(t, 'interchange-1', n);
 
   overview = (await t.get('/api/progress/overview')).body.overview;
-  assert.equal(overview.completedUnits, 20);
-  assert.equal(overview.percent, 31.25);
+  assert.equal(overview.completedUnits, 16, 'só o Intro tem unidades com os dois materiais');
+  assert.equal(overview.completedTasks, 36);
+  assert.equal(overview.percent, 28.13); // 36 / 128
   assert.equal(overview.currentBook.slug, 'interchange-1');
   assert.equal(overview.currentBook.title, 'Interchange 1');
 });
@@ -389,14 +461,18 @@ test('backup: exportar e importar em um banco limpo reproduz progresso, materiai
   const source = await setup();
   await toggle(source, 'intro', 1);
   await toggle(source, 'intro', 2);
+  await toggle(source, 'intro', 2, true, 'workbook');
   await toggle(source, 'interchange-3', 16);
+  await toggle(source, 'interchange-3', 15, true, 'workbook');
   await source.post('/api/books/interchange-1/materials', { kind: 'workbook', title: 'WB', url: 'https://example.com/wb' });
   await source.put('/api/books/interchange-2/notes', { content: 'minhas notas' });
 
   const exported = await source.get('/api/backup/export');
   assert.equal(exported.status, 200);
   assert.equal(exported.body.app, 'my-english-journey');
-  assert.equal(exported.body.version, 1);
+  assert.equal(exported.body.version, 2);
+  assert.deepEqual(exported.body.books[0].completedUnits, [1, 2]);
+  assert.deepEqual(exported.body.books[0].workbookCompletedUnits, [2]);
   assert.equal(exported.body.books.length, 4);
   assert.ok(!JSON.stringify(exported.body).includes('password'));
 
@@ -404,10 +480,11 @@ test('backup: exportar e importar em um banco limpo reproduz progresso, materiai
   const imported = await target.post('/api/backup/import', exported.body);
   assert.equal(imported.status, 200);
   assert.equal(imported.body.imported, true);
-  assert.deepEqual(imported.body.summary, { books: 4, completedUnits: 3, materials: 1, notes: 1 });
+  assert.deepEqual(imported.body.summary, { books: 4, studentBookUnits: 3, workbookUnits: 2, materials: 1, notes: 1 });
 
   const books = (await target.get('/api/books')).body.books;
-  assert.deepEqual(books.map((b) => b.completedUnits), [2, 0, 0, 1]);
+  assert.deepEqual(books.map((b) => b.studentBook.completed), [2, 0, 0, 1]);
+  assert.deepEqual(books.map((b) => b.workbook.completed), [1, 0, 0, 1]);
   assert.equal((await target.get('/api/books/interchange-1/materials')).body.materials[0].title, 'WB');
   assert.equal((await target.get('/api/books/interchange-2/notes')).body.notes.content, 'minhas notas');
 
@@ -422,31 +499,45 @@ test('backup: importar substitui os dados existentes dos livros do arquivo', asy
   await toggle(t, 'interchange-1', 1);
   await t.post('/api/books/intro/materials', { kind: 'audio', url: 'https://example.com/old' });
 
-  const backup = { app: 'my-english-journey', version: 1, books: [{ slug: 'intro', completedUnits: [2, 4] }] };
+  const backup = { app: 'my-english-journey', version: 2, books: [{ slug: 'intro', completedUnits: [2, 4], workbookCompletedUnits: [4] }] };
   const res = await t.post('/api/backup/import', backup);
   assert.equal(res.status, 200);
 
   const books = (await t.get('/api/books')).body.books;
-  assert.deepEqual(books[0].completedUnitNumbers, [2, 4]);
-  assert.equal(books[1].completedUnits, 1, 'livros fora do arquivo permanecem intactos');
+  assert.deepEqual(books[0].studentBook.completedUnitNumbers, [2, 4]);
+  assert.deepEqual(books[0].workbook.completedUnitNumbers, [4]);
+  assert.equal(books[1].studentBook.completed, 1, 'livros fora do arquivo permanecem intactos');
   assert.deepEqual((await t.get('/api/books/intro/materials')).body.materials, []);
+});
+
+test('backup v1 (antigo, sem Workbook) importa o Student\'s Book e não apaga o Workbook', async () => {
+  const t = await setup();
+  await toggle(t, 'intro', 7, true, 'workbook');
+  const v1 = { app: 'my-english-journey', version: 1, books: [{ slug: 'intro', completedUnits: [1, 2] }] };
+  const res = await t.post('/api/backup/import', v1);
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.summary, { books: 1, studentBookUnits: 2, workbookUnits: 0, materials: 0, notes: 0 });
+  const { book } = (await t.get('/api/books/intro')).body;
+  assert.deepEqual(book.studentBook.completedUnitNumbers, [1, 2]);
+  assert.deepEqual(book.workbook.completedUnitNumbers, [7], 'Workbook preservado');
 });
 
 test('backup: dryRun valida sem gravar nada', async () => {
   const t = await setup();
-  const backup = { app: 'my-english-journey', version: 1, books: [{ slug: 'intro', completedUnits: [1, 2, 3] }] };
+  const backup = { app: 'my-english-journey', version: 2, books: [{ slug: 'intro', completedUnits: [1, 2, 3], workbookCompletedUnits: [1] }] };
   const res = await t.post('/api/backup/import?dryRun=true', backup);
   assert.equal(res.status, 200);
   assert.equal(res.body.dryRun, true);
   assert.equal(res.body.imported, false);
-  assert.equal(res.body.summary.completedUnits, 3);
-  assert.equal((await t.get('/api/books/intro')).body.book.completedUnits, 0);
+  assert.equal(res.body.summary.studentBookUnits, 3);
+  assert.equal(res.body.summary.workbookUnits, 1);
+  assert.equal((await t.get('/api/books/intro')).body.book.completedTasks, 0);
 });
 
 test('backup: arquivos inválidos são rejeitados (400) e nada é alterado', async () => {
   const t = await setup();
   await toggle(t, 'intro', 1);
-  const ok = { app: 'my-english-journey', version: 1 };
+  const ok = { app: 'my-english-journey', version: 2 };
 
   const invalid = [
     {},
@@ -458,6 +549,8 @@ test('backup: arquivos inválidos são rejeitados (400) e nada é alterado', asy
     { ...ok, books: [{ slug: 'intro', completedUnits: [0] }] },
     { ...ok, books: [{ slug: 'intro', completedUnits: [17] }] },
     { ...ok, books: [{ slug: 'intro', completedUnits: [1, 1] }] },
+    { ...ok, books: [{ slug: 'intro', workbookCompletedUnits: [17] }] },
+    { ...ok, books: [{ slug: 'intro', workbookCompletedUnits: 'todas' }] },
     { ...ok, books: [{ slug: 'intro', completedUnits: ['1'] }] },
     { ...ok, books: [{ slug: 'intro' }, { slug: 'intro' }] },
     { ...ok, books: [{ slug: 'intro', materials: [{ kind: 'audio', url: 'javascript:alert(1)' }] }] },
@@ -468,7 +561,7 @@ test('backup: arquivos inválidos são rejeitados (400) e nada é alterado', asy
     assert.equal(res.status, 400, JSON.stringify(body).slice(0, 100));
     assert.equal(res.body.error.code, 'INVALID_BACKUP');
   }
-  assert.equal((await t.get('/api/books/intro')).body.book.completedUnits, 1);
+  assert.equal((await t.get('/api/books/intro')).body.book.studentBook.completed, 1);
 });
 
 // ---------- CORS e segurança ----------

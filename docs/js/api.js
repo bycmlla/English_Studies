@@ -161,8 +161,8 @@ export function wakeUp() {
 }
 
 export const listBooks = () => request('/api/books').then((d) => d.books);
-export const setUnit = (slug, number, completed) =>
-  request(`${book(slug)}/units/${number}`, { method: 'PUT', body: { completed } });
+export const setUnit = (slug, number, bookType, completed) =>
+  request(`${book(slug)}/units/${number}`, { method: 'PUT', body: { completed, bookType } });
 
 export const listMaterials = (slug) => request(`${book(slug)}/materials`).then((d) => d.materials);
 export const createMaterial = (slug, data) =>
@@ -171,9 +171,6 @@ export const updateMaterial = (slug, id, data) =>
   request(`${book(slug)}/materials/${id}`, { method: 'PUT', body: data }).then((d) => d.material);
 export const deleteMaterial = (slug, id) => request(`${book(slug)}/materials/${id}`, { method: 'DELETE', retry: false });
 
-export const getNotes = (slug) => request(`${book(slug)}/notes`).then((d) => d.notes);
-export const saveNotes = (slug, content) =>
-  request(`${book(slug)}/notes`, { method: 'PUT', body: { content } }).then((d) => d.notes);
 
 export const exportBackup = () => request('/api/backup/export');
 export const importBackup = (payload, { dryRun = false } = {}) =>

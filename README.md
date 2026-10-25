@@ -20,7 +20,7 @@ Painel pessoal para acompanhar o progresso nos livros **Interchange Fifth Editio
 │       ├── store.js           # Estado + marcar/desmarcar com rollback em falha
 │       ├── progress.js        # Cálculo de progresso (espelha o backend)
 │       ├── dashboard.js       # Cabeçalho, visão geral, cartões
-│       ├── bookPanel.js       # Unidades, Study Materials, anotações
+│       ├── bookPanel.js       # Unidades e Study Materials
 │       ├── settings.js        # Backup (exportar/importar) e sair
 │       ├── login.js, ui.js, sync.js, dom.js, theme-init.js
 ├── backend/
@@ -47,13 +47,14 @@ Painel pessoal para acompanhar o progresso nos livros **Interchange Fifth Editio
 
 ## Funcionalidades
 
-- Quatro cartões (Intro, 1, 2, 3) com indicador colorido, nível, **status** (Não iniciado / Estudando / Concluído), **barra de progresso larga**, porcentagem e "X de 16 unidades concluídas".
-- Progresso **calculado dinamicamente** `(concluídas / 16) × 100` — 1 unidade = 6,25 %.
-- Cartão expansível com 16 checkboxes. Marcar/desmarcar atualiza a barra na hora, **salva no backend** e, se falhar, **restaura o estado anterior** e oferece "Tentar novamente". O indicador do cabeçalho só diz "Salvo" após a API confirmar.
-- **Study Materials** (Student's Book, Workbook, Audio Materials): adicionar, editar, abrir e remover links (apenas `http`/`https`).
-- **Anotações** por livro com salvamento automático.
-- **Visão geral**: 64 unidades, concluídas, % geral e livro em estudo.
-- **Backup**: exportar JSON; importar com validação prévia no servidor (dry-run) e confirmação antes de substituir.
+- Quatro cartões (Intro, 1, 2, 3) com indicador colorido, nível, **status** (Não iniciado / Estudando / Concluído), **barra de progresso larga**, porcentagem e "X de 32 atividades concluídas" (com o detalhe `Student's Book a/16 · Workbook b/16`).
+- **Student's Book e Workbook acompanhados separadamente**: cada nível tem 16 unidades × 2 = **32 conclusões**; o percentual do nível soma as duas partes. Dentro do cartão há uma barra e uma porcentagem para cada material.
+- Cada unidade tem um checkbox para o Student's Book e outro para o Workbook; só fica **"Completa"** quando os dois estão marcados.
+- Progresso **calculado dinamicamente** `(concluídas / total) × 100` — 1 unidade de um material = 6,25 %.
+- Marcar/desmarcar atualiza as barras na hora, **salva no backend** e, se falhar, **restaura o estado anterior** e oferece "Tentar novamente". O indicador do cabeçalho só diz "Salvo" após a API confirmar.
+- **Study Materials** (grupo único "Important links"; internamente usa a chave `student_book`, e a API ainda aceita `workbook` e `audio`): adicionar, editar, abrir e remover links (apenas `http`/`https`).
+- **Visão geral**: 64 unidades, unidades completas (Student's Book + Workbook), % geral sobre as 128 atividades e livro em estudo.
+- **Backup**: exportar JSON (progresso e links); importar com validação prévia no servidor (dry-run) e confirmação antes de substituir.
 - Modo claro/escuro (preferência salva), responsivo, navegação por teclado, `prefers-reduced-motion`.
 - Aviso amigável quando o servidor gratuito do Render está "acordando".
 
@@ -111,6 +112,8 @@ CREATE DATABASE journey OWNER journey ENCODING 'UTF8';
 ```bash
 cd backend && npm run migrate     # usa DATABASE_URL do .env ou do ambiente
 ```
+
+**Migration 003 (Workbook):** adiciona a coluna `unit_progress.book_type` (`student_book` | `workbook`) e a inclui na chave primária. Todo progresso já gravado vira `student_book` automaticamente, sem perder nada. Não exige nenhuma ação manual.
 
 No Render isso já acontece sozinho a cada deploy (`RUN_MIGRATIONS_ON_START=true`). Para rodar manualmente: aba **Shell** do serviço → `npm run migrate`.
 
@@ -170,16 +173,16 @@ Todas as rotas `/api/*` (exceto login) exigem `Authorization: Bearer <token>`. E
 | GET | `/health` | Saúde da API e do banco (público) |
 | POST | `/api/auth/login` | `{ email, password }` → `{ token, expiresAt }` (limitado por IP) |
 | GET | `/api/auth/me` | Usuário do token |
-| GET | `/api/books` | Livros com progresso calculado (`percent`, `status`, `completedUnitNumbers`) |
+| GET | `/api/books` | Livros com progresso: `studentBook` e `workbook` (cada um com `completed`, `percent`, `completedUnitNumbers`), `fullyCompletedUnits`, `completedTasks`/`totalTasks` (32), `percent` e `status` do nível |
 | GET | `/api/books/:slug` | Um livro (`intro`, `interchange-1`, `interchange-2`, `interchange-3`) |
-| GET | `/api/books/:slug/units` | Unidades 01–16 com estado |
-| PUT | `/api/books/:slug/units/:n` | `{ completed: true|false }` (n entre 1 e 16) |
+| GET | `/api/books/:slug/units` | Unidades 01–16 com o estado de `studentBook` e `workbook` e `completed` (os dois) |
+| PUT | `/api/books/:slug/units/:n` | `{ completed: true|false, bookType: "student_book"|"workbook" }` (n entre 1 e 16; `bookType` é opcional e o padrão é `student_book`) |
 | GET/POST | `/api/books/:slug/materials` | Listar / criar link (`kind`: `student_book`, `workbook`, `audio`) |
 | PUT/DELETE | `/api/books/:slug/materials/:id` | Editar / remover |
 | GET/PUT | `/api/books/:slug/notes` | Anotações `{ content }` (até 20 000 caracteres) |
-| GET | `/api/progress/overview` | 64 unidades, concluídas, % geral, livro atual |
-| GET | `/api/backup/export` | Backup JSON |
-| POST | `/api/backup/import[?dryRun=true]` | Valida (e, sem `dryRun`, substitui os dados dos livros do arquivo) |
+| GET | `/api/progress/overview` | 64 unidades, unidades completas, 128 atividades, % geral, livro atual |
+| GET | `/api/backup/export` | Backup JSON (versão 2: `completedUnits` = Student's Book e `workbookCompletedUnits`) |
+| POST | `/api/backup/import[?dryRun=true]` | Valida (e, sem `dryRun`, substitui os dados dos livros do arquivo). Aceita backups v1 (sem Workbook): o Workbook existente é preservado |
 
 ## Segurança
 
@@ -196,12 +199,13 @@ cd backend
 npm test
 ```
 
-51 testes (`node:test`) cobrindo: cálculo de progresso (0, 1, 4, 8, 12, 16 unidades nos 4 livros), marcar/desmarcar, persistência e "outro dispositivo", validações e códigos HTTP, autenticação (sem token, expirado, forjado, `alg=none`, limite de tentativas), materiais, anotações, backup (ida e volta, dry-run, arquivos inválidos), CORS, migrations idempotentes, restrições do banco, paridade do cálculo frontend/backend e varredura de segredos no `docs/`.
+57 testes (`node:test`) cobrindo: cálculo de progresso (0, 1, 4, 8, 12, 16 unidades de cada material nos 4 livros; nível com 32 conclusões; unidade completa só com Student's Book + Workbook), migração 003 sobre dados existentes, marcar/desmarcar, persistência e "outro dispositivo", validações e códigos HTTP, autenticação (sem token, expirado, forjado, `alg=none`, limite de tentativas), materiais, anotações, backup (ida e volta, dry-run, arquivos inválidos), CORS, migrations idempotentes, restrições do banco, paridade do cálculo frontend/backend e varredura de segredos no `docs/`.
 
 Os testes de API usam `pg-mem` (PostgreSQL em memória). Além disso, o fluxo completo foi verificado manualmente contra um **PostgreSQL 16 real** e a interface em navegador (desktop, celular 390 px, teclado, modo escuro, falha de rede com rollback, exportar/importar backup).
 
 ## Limitações e pendências
 
+- As anotações por livro foram removidas da interface; a API (`/notes`) e o backup ainda as suportam.
 - Aplicação de usuário único; o frontend não tem tela para trocar a senha (altere `ADMIN_PASSWORD` e reinicie).
 - Token em `localStorage` (trade-off descrito acima); não há revogação individual de tokens além de trocar `JWT_SECRET` (invalida todos).
 - O limite de login é por IP e em memória: reinicia com o serviço.

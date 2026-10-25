@@ -25,13 +25,22 @@ test('frontend: cálculo de progresso é idêntico ao do backend (0..16 unidades
   assert.equal(front.calculatePercent(4, 16), 25);
   assert.equal(front.calculatePercent(16, 16), 100);
 
-  const books = [
-    { slug: 'a', title: 'A', level: 'A1', totalUnits: 16, completedUnits: 16, status: 'completed', lastActivityAt: null },
-    { slug: 'b', title: 'B', level: 'A2', totalUnits: 16, completedUnits: 3, status: 'studying', lastActivityAt: '2026-01-01T00:00:00Z' },
-    { slug: 'c', title: 'C', level: 'B1', totalUnits: 16, completedUnits: 0, status: 'not_started', lastActivityAt: null },
+  // Mesma entrada, mesma saída: nível (Student's Book + Workbook) e visão geral.
+  const mk = (slug, sb, wb, at) => ({ slug, title: slug, level: 'A1', lastActivityAt: at, ...backendProgress.summarizeBookProgress({ studentBook: sb, workbook: wb }) });
+  const range = (n) => Array.from({ length: n }, (_, i) => i + 1);
+  const cases = [
+    [[], []], [[1], []], [[], [1]], [range(16), []], [range(16), range(16)], [[1, 2, 3, 9], [2, 3, 4]],
   ];
-  assert.equal(front.summarizeOverall(books).currentBook.slug, backendProgress.summarizeOverall(books).currentBook.slug);
-  assert.equal(front.summarizeOverall(books).percent, backendProgress.summarizeOverall(books).percent);
+  for (const [sb, wb] of cases) {
+    assert.deepEqual(front.summarizeBookProgress({ studentBook: sb, workbook: wb }), backendProgress.summarizeBookProgress({ studentBook: sb, workbook: wb }));
+  }
+  const books = [mk('a', range(16), range(16), null), mk('b', [1, 2, 3], [1], '2026-01-01T00:00:00Z'), mk('c', [], [], null)];
+  const fo = front.summarizeOverall(books);
+  const bo = backendProgress.summarizeOverall(books);
+  assert.equal(fo.percent, bo.percent);
+  assert.equal(fo.completedUnits, bo.completedUnits);
+  assert.equal(fo.totalTasks, 96);
+  assert.equal(fo.currentBook.slug, bo.currentBook.slug);
 });
 
 test('frontend: nenhuma credencial ou segredo é exposto nos arquivos publicados', () => {

@@ -728,6 +728,126 @@ main:focus {
   outline-offset: 2px;
 }
 
+/* progresso por material (Student's Book / Workbook) */
+.material-progress {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mp {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.mp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mp-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.mp-pct {
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.mp-count {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.progress-mid {
+  height: 10px;
+  margin-top: 10px;
+}
+
+.full-line {
+  margin-top: 12px;
+}
+
+/* lista de unidades: uma linha por unidade, com um checkbox por material */
+.unit-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.unit-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) minmax(0, 1fr) 84px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.unit-row.is-complete {
+  background: var(--green-soft);
+  border-color: color-mix(in srgb, var(--green) 40%, transparent);
+}
+
+.unit-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.unit-badge {
+  justify-self: end;
+  padding: 1px 10px;
+  border-radius: 6px;
+  background: var(--pill-gray-bg);
+  color: var(--pill-gray-fg);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.unit-badge[data-state='partial'] {
+  background: var(--pill-blue-bg);
+  color: var(--pill-blue-fg);
+}
+
+.unit-badge[data-state='complete'] {
+  background: var(--pill-green-bg);
+  color: var(--pill-green-fg);
+}
+
+.unit-row .unit {
+  min-height: 44px;
+  padding: 6px 10px;
+  font-size: 0.9rem;
+}
+
+.breakdown {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.overview-note {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
 /* materiais */
 .materials {
   display: flex;
@@ -1104,6 +1224,42 @@ dialog.modal[open] {
 }
 
 @media (max-width: 560px) {
+  .material-progress {
+    grid-template-columns: 1fr;
+  }
+
+  .unit-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'name badge'
+      'sb wb';
+    gap: 8px;
+    padding: 10px;
+    align-items: stretch;
+  }
+
+  .unit-row .unit {
+    gap: 8px;
+    padding: 6px 8px;
+    font-size: 0.85rem;
+  }
+
+  .unit-row .unit-name {
+    grid-area: name;
+  }
+
+  .unit-row .unit-badge {
+    grid-area: badge;
+  }
+
+  .unit-row .unit:nth-of-type(1) {
+    grid-area: sb;
+  }
+
+  .unit-row .unit:nth-of-type(2) {
+    grid-area: wb;
+  }
+
   .page {
     padding: 0 16px 96px;
   }

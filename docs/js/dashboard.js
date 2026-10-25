@@ -1,9 +1,9 @@
 // Tela principal: cabeçalho, visão geral e cartões dos livros.
 import { h, icon, formatPercent } from './dom.js';
-import { STATUS_LABEL } from './progress.js';
+import { STATUS_LABEL, BOOK_TYPE_LABEL } from './progress.js';
 import { store, subscribe, resetSubscribers, viewOf, overview, getBook, refreshBooks } from './store.js';
 import { onSyncChange } from './sync.js';
-import { createBookPanel, hasUnsavedNotes } from './bookPanel.js';
+import { createBookPanel } from './bookPanel.js';
 import { openSettings } from './settings.js';
 
 const SYNC_TEXT = {
@@ -45,11 +45,12 @@ function createOverview() {
     return { value, el: h('div', { class: 'stat' }, h('span', { class: 'stat-label' }, label), value) };
   };
   const total = stat('Total de unidades');
-  const done = stat('Unidades concluídas');
+  const done = stat('Unidades completas');
   const percent = stat('Progresso geral');
   const current = stat('Estudando agora');
   current.value.classList.add('stat-text');
 
+  const note = h('p', { class: 'overview-note' });
   const fill = h('div', { class: 'progress-fill' });
   const bar = h('div', {
     class: 'progress progress-thin', role: 'progressbar', 'aria-label': 'Progresso geral',
@@ -62,10 +63,12 @@ function createOverview() {
     h('h2', { id: 'overview-title', class: 'overview-title' }, 'Visão geral'),
     h('div', { class: 'stats' }, total.el, done.el, percent.el, current.el),
     bar,
+    note,
   );
 
   function update() {
     const o = overview();
+    note.textContent = `${o.completedTasks} de ${o.totalTasks} atividades concluídas. Uma unidade completa tem Student's Book e Workbook concluídos.`;
     total.value.textContent = String(o.totalUnits);
     done.value.textContent = String(o.completedUnits);
     percent.value.textContent = formatPercent(o.percent);
@@ -86,6 +89,7 @@ function createCard(slug) {
   const statusPill = h('span', { class: 'status-pill' });
   const percent = h('span', { class: 'percent' });
   const count = h('span', { class: 'count' });
+  const breakdown = h('p', { class: 'breakdown' });
   const fill = h('div', { class: 'progress-fill' });
   const bar = h('div', {
     class: 'progress', role: 'progressbar', 'aria-label': `Progresso em ${book.title}`,
@@ -111,6 +115,7 @@ function createCard(slug) {
     h('p', { class: 'status-line' }, 'Status: ', statusPill),
     bar,
     h('div', { class: 'progress-meta' }, percent, count),
+    breakdown,
   );
 
   const el = h('article', { class: 'card', 'data-color': book.color, 'data-slug': slug }, summary, panel);
@@ -137,7 +142,8 @@ function createCard(slug) {
     statusPill.textContent = STATUS_LABEL[view.status];
     statusPill.className = `status-pill status-${view.status}`;
     percent.textContent = formatPercent(view.percent);
-    count.textContent = `${view.completedUnits} de ${view.totalUnits} unidades concluídas`;
+    count.textContent = `${view.completedTasks} de ${view.totalTasks} atividades concluídas`;
+    breakdown.textContent = `${BOOK_TYPE_LABEL.student_book} ${view.studentBook.completed}/${view.totalUnits} · ${BOOK_TYPE_LABEL.workbook} ${view.workbook.completed}/${view.totalUnits}`;
     fill.style.setProperty('--value', `${view.percent}%`);
     bar.setAttribute('aria-valuenow', String(view.percent));
     bar.setAttribute('aria-valuetext', `${formatPercent(view.percent)} concluído`);
@@ -228,16 +234,11 @@ export function renderDashboard(root, { session, onLogout, onDataChanged }) {
   };
   document.addEventListener('visibilitychange', onVisible);
 
-  const onBeforeUnload = (event) => {
-    if (hasUnsavedNotes()) { event.preventDefault(); event.returnValue = ''; }
-  };
-  window.addEventListener('beforeunload', onBeforeUnload);
 
   return () => {
     unsubscribeSync();
     resetSubscribers();
     document.removeEventListener('visibilitychange', onVisible);
-    window.removeEventListener('beforeunload', onBeforeUnload);
   };
 }
 

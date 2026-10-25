@@ -1,8 +1,8 @@
-// Estado em memória dos livros + lógica de marcar/desmarcar unidades.
+// Estado em memória dos livros + lógica de marcar/desmarcar atividades (Student's Book e Workbook).
 // O servidor é a fonte oficial: a interface atualiza de forma otimista e, se a
 // gravação falhar, volta ao último estado confirmado pela API.
 import * as api from './api.js';
-import { calculatePercent, getStatus, summarizeOverall } from './progress.js';
+import { BOOK_TYPES, summarizeBookProgress, summarizeOverall } from './progress.js';
 import { track } from './sync.js';
 
 export const store = {
@@ -20,10 +20,15 @@ export const resetSubscribers = () => listeners.clear();
 const emit = (event) => listeners.forEach((fn) => fn(event));
 
 const pendingByBook = new Map(); // slug -> operações em andamento
-const pendingByUnit = new Map(); // `${slug}:${n}` -> operações em andamento
+const pendingByUnit = new Map(); // `${slug}:${bookType}:${n}` -> operações em andamento
 const queues = new Map(); // slug -> Promise (serializa gravações do mesmo livro)
 
 const bump = (map, key, delta) => map.set(key, (map.get(key) || 0) + delta);
+
+const setsFrom = (book) => ({
+  student_book: new Set(book.studentBook.completedUnitNumbers),
+  workbook: new Set(book.workbook.completedUnitNumbers),
+});
 
 function fromApi(book) {
   return {
@@ -33,19 +38,23 @@ function fromApi(book) {
     color: book.color,
     totalUnits: book.totalUnits,
     lastActivityAt: book.lastActivityAt,
-    done: new Set(book.completedUnitNumbers), // estado exibido (otimista)
-    confirmed: new Set(book.completedUnitNumbers), // último estado confirmado pelo servidor
+    done: setsFrom(book), // estado exibido (otimista)
+    confirmed: setsFrom(book), // último estado confirmado pelo servidor
   };
 }
 
-/** Visão derivada: porcentagem, status e contagem sempre calculados a partir de `done`. */
+/** Visão derivada: porcentagens e status sempre calculados a partir de `done`. */
 export function viewOf(book) {
-  const completedUnits = book.done.size;
   return {
-    ...book,
-    completedUnits,
-    percent: calculatePercent(completedUnits, book.totalUnits),
-    status: getStatus(completedUnits, book.totalUnits),
+    slug: book.slug,
+    title: book.title,
+    level: book.level,
+    color: book.color,
+    lastActivityAt: book.lastActivityAt,
+    ...summarizeBookProgress(
+      { studentBook: [...book.done.student_book], workbook: [...book.done.workbook] },
+      book.totalUnits,
+    ),
   };
 }
 
@@ -79,25 +88,26 @@ export function clearStore() {
 }
 
 /**
- * Marca/desmarca uma unidade. Retorna uma Promise que resolve com true (salvo) ou false (falhou).
- * `onFailure(retry)` é chamado quando a gravação falha, para a interface avisar o usuário.
+ * Marca/desmarca o Student's Book ou o Workbook de uma unidade.
+ * Retorna uma Promise com true (salvo) ou false (falhou).
+ * `onFailure(error, retry)` é chamado quando a gravação falha, para a interface avisar o usuário.
  */
-export function toggleUnit(slug, number, completed, { onFailure } = {}) {
+export function toggleUnit(slug, number, bookType, completed, { onFailure } = {}) {
   const book = getBook(slug);
-  if (!book) return Promise.resolve(false);
+  if (!book || !BOOK_TYPES.includes(bookType)) return Promise.resolve(false);
 
-  const unitKey = `${slug}:${number}`;
-  if (completed) book.done.add(number);
-  else book.done.delete(number);
+  const unitKey = `${slug}:${bookType}:${number}`;
+  if (completed) book.done[bookType].add(number);
+  else book.done[bookType].delete(number);
   bump(pendingByBook, slug, 1);
   bump(pendingByUnit, unitKey, 1);
   emit({ type: 'book', slug });
 
   const run = async () => {
     try {
-      const result = await track(api.setUnit(slug, number, completed));
-      if (result.unit.completed) book.confirmed.add(number);
-      else book.confirmed.delete(number);
+      const result = await track(api.setUnit(slug, number, bookType, completed));
+      if (result.unit.completed) book.confirmed[bookType].add(number);
+      else book.confirmed[bookType].delete(number);
       book.lastActivityAt = result.unit.updatedAt;
       return { ok: true, server: result.book };
     } catch (error) {
@@ -110,21 +120,23 @@ export function toggleUnit(slug, number, completed, { onFailure } = {}) {
     bump(pendingByBook, slug, -1);
     bump(pendingByUnit, unitKey, -1);
 
-    // Só reverte/ajusta quando não há mais gravações pendentes desta unidade,
+    // Só reverte/ajusta quando não há mais gravações pendentes desta atividade,
     // para que cliques rápidos não briguem entre si.
     if (pendingByUnit.get(unitKey) === 0) {
-      if (book.confirmed.has(number)) book.done.add(number);
-      else book.done.delete(number);
+      if (book.confirmed[bookType].has(number)) book.done[bookType].add(number);
+      else book.done[bookType].delete(number);
     }
     // Sem nada pendente no livro, adota o estado oficial devolvido pelo servidor
     // (inclui mudanças feitas em outro dispositivo).
     if (outcome.ok && pendingByBook.get(slug) === 0) {
-      book.done = new Set(outcome.server.completedUnitNumbers);
-      book.confirmed = new Set(outcome.server.completedUnitNumbers);
+      book.done = setsFrom(outcome.server);
+      book.confirmed = setsFrom(outcome.server);
     }
     emit({ type: 'book', slug });
 
-    if (!outcome.ok) onFailure?.(outcome.error, () => toggleUnit(slug, number, completed, { onFailure }));
+    if (!outcome.ok) {
+      onFailure?.(outcome.error, () => toggleUnit(slug, number, bookType, completed, { onFailure }));
+    }
     return outcome.ok;
   });
   queues.set(slug, current);

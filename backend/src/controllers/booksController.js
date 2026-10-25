@@ -40,8 +40,8 @@ const listUnits = async (req, res) => {
 
 const updateUnit = async (req, res) => {
   const number = parseUnitNumber(req.params.unitNumber);
-  const completed = validateUnitUpdate(req.body);
-  res.json(await books.setUnitCompleted(req.app.locals.db, req.user.id, req.book, number, completed));
+  const { completed, bookType } = validateUnitUpdate(req.body);
+  res.json(await books.setUnitCompleted(req.app.locals.db, req.user.id, req.book, number, bookType, completed));
 };
 
 const listMaterials = async (req, res) => {

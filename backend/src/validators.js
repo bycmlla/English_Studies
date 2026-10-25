@@ -1,7 +1,7 @@
 'use strict';
 
 const { AppError, badRequest } = require('./errors');
-const { UNITS_PER_BOOK } = require('./services/progress');
+const { UNITS_PER_BOOK, BOOK_TYPES } = require('./services/progress');
 
 const MATERIAL_KINDS = ['student_book', 'workbook', 'audio'];
 const MAX_MATERIALS_PER_BOOK = 30;
@@ -9,7 +9,8 @@ const MAX_NOTES_LENGTH = 20000;
 const MAX_TITLE_LENGTH = 120;
 const MAX_URL_LENGTH = 2048;
 const BACKUP_APP_ID = 'my-english-journey';
-const BACKUP_VERSION = 1;
+const BACKUP_VERSION = 2; // versão gravada ao exportar
+const SUPPORTED_BACKUP_VERSIONS = [1, 2]; // v1 não tinha Workbook
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -83,11 +84,16 @@ function parseId(raw, label = 'id') {
   return id;
 }
 
+/** Corpo de PUT /units/:n -> { completed, bookType }. bookType é opcional (padrão: student_book). */
 function validateUnitUpdate(body) {
   if (!isPlainObject(body) || typeof body.completed !== 'boolean') {
     throw badRequest('Informe "completed" como true ou false.');
   }
-  return body.completed;
+  const bookType = body.bookType ?? 'student_book';
+  if (!BOOK_TYPES.includes(bookType)) {
+    throw badRequest(`"bookType" deve ser um de: ${BOOK_TYPES.join(', ')}.`);
+  }
+  return { completed: body.completed, bookType };
 }
 
 function validateMaterial(body) {
@@ -122,7 +128,9 @@ function validateBackup(data, validSlugs) {
     fail();
   }
   if (data.app !== BACKUP_APP_ID) errors.push(`Campo "app" deve ser "${BACKUP_APP_ID}"`);
-  if (data.version !== BACKUP_VERSION) errors.push(`Versão de backup não suportada (esperado ${BACKUP_VERSION})`);
+  if (!SUPPORTED_BACKUP_VERSIONS.includes(data.version)) {
+    errors.push(`Versão de backup não suportada (esperado ${SUPPORTED_BACKUP_VERSIONS.join(' ou ')})`);
+  }
   if (!Array.isArray(data.books)) {
     errors.push('Campo "books" deve ser uma lista');
     fail();
@@ -148,14 +156,22 @@ function validateBackup(data, validSlugs) {
     }
     seen.add(entry.slug);
 
-    const completedUnits = entry.completedUnits ?? [];
-    if (
-      !Array.isArray(completedUnits) ||
-      completedUnits.some((n) => !Number.isInteger(n) || n < 1 || n > UNITS_PER_BOOK) ||
-      new Set(completedUnits).size !== completedUnits.length
-    ) {
-      errors.push(`${label}: completedUnits deve ser uma lista de números únicos entre 1 e ${UNITS_PER_BOOK}`);
-    }
+    const unitList = (field, value) => {
+      if (
+        !Array.isArray(value) ||
+        value.some((n) => !Number.isInteger(n) || n < 1 || n > UNITS_PER_BOOK) ||
+        new Set(value).size !== value.length
+      ) {
+        errors.push(`${label}: ${field} deve ser uma lista de números únicos entre 1 e ${UNITS_PER_BOOK}`);
+        return [];
+      }
+      return [...value].sort((a, b) => a - b);
+    };
+    // completedUnits = Student's Book (nome mantido por compatibilidade com backups v1).
+    const completedUnits = unitList('completedUnits', entry.completedUnits ?? []);
+    // Backups v1 não têm Workbook: null significa "não mexer no Workbook ao importar".
+    const workbookCompletedUnits =
+      entry.workbookCompletedUnits === undefined ? null : unitList('workbookCompletedUnits', entry.workbookCompletedUnits);
 
     const notes = entry.notes ?? '';
     if (typeof notes !== 'string' || notes.length > MAX_NOTES_LENGTH) {
@@ -176,7 +192,8 @@ function validateBackup(data, validSlugs) {
 
     books.push({
       slug: entry.slug,
-      completedUnits: Array.isArray(completedUnits) ? [...completedUnits].sort((a, b) => a - b) : [],
+      completedUnits,
+      workbookCompletedUnits,
       notes: typeof notes === 'string' ? notes : '',
       materials,
     });
@@ -191,6 +208,7 @@ module.exports = {
   MAX_MATERIALS_PER_BOOK,
   BACKUP_APP_ID,
   BACKUP_VERSION,
+  SUPPORTED_BACKUP_VERSIONS,
   validateLogin,
   parseUnitNumber,
   parseId,

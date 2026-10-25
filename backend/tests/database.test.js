@@ -26,7 +26,7 @@ test('rodar migrations de novo não duplica registros nem reaplica arquivos', as
   assert.deepEqual(again, []);
   assert.equal(await count(pool, 'books'), 4);
   assert.equal(await count(pool, 'units'), 64);
-  assert.equal(await count(pool, 'schema_migrations'), 2);
+  assert.equal(await count(pool, 'schema_migrations'), 3);
 });
 
 test('o seed é idempotente mesmo executado manualmente de novo', async () => {

@@ -45,9 +45,9 @@ function summaryList(summary) {
     'ul',
     { class: 'summary-list' },
     h('li', {}, `${summary.books} livro(s)`),
-    h('li', {}, `${summary.completedUnits} unidade(s) concluída(s)`),
+    h('li', {}, `${summary.studentBookUnits} unidade(s) do Student's Book`),
+    h('li', {}, `${summary.workbookUnits} unidade(s) do Workbook`),
     h('li', {}, `${summary.materials} link(s) de materiais`),
-    h('li', {}, `${summary.notes} anotação(ões)`),
   );
 }
 
@@ -69,7 +69,7 @@ async function importBackup(file, ctx, onDataChanged) {
     ctx.setBusy(false);
     const ok = await confirmDialog({
       title: 'Substituir dados atuais?',
-      message: 'Este backup substituirá o progresso, os links e as anotações dos livros incluídos nele. Esta ação não pode ser desfeita.',
+      message: 'Este backup substituirá o progresso e os links dos livros incluídos nele. Esta ação não pode ser desfeita.',
       confirmLabel: 'Importar e substituir',
       danger: true,
       details: summaryList(check.summary),
@@ -107,7 +107,7 @@ export function openSettings({ session, onLogout, onDataChanged }) {
       'div',
       { class: 'settings-group' },
       h('h3', { class: 'section-title' }, 'Backup'),
-      h('p', { class: 'muted' }, 'Inclui progresso, links de materiais e anotações.'),
+      h('p', { class: 'muted' }, 'Inclui o progresso e os links de materiais.'),
       h(
         'div',
         { class: 'settings-actions' },
