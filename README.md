@@ -137,7 +137,8 @@ Alternativa: **New → Blueprint** usando o `render.yaml` da raiz (cria banco e 
 
 1. Edite [`docs/config.js`](docs/config.js) e coloque a URL real da API em `API_URL` (sem barra no final).
 2. Se a API usar um domínio que **não** seja `*.onrender.com`, inclua-o em `connect-src` na meta CSP de [`docs/index.html`](docs/index.html).
-3. Faça commit/push. No GitHub: **Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch: `main` / folder: `/docs`**.
+3. Uma única vez, no GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+   Depois disso, todo push na `main` que altere `docs/` roda o workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml): ele executa os testes e publica a pasta `docs/`. Também dá para publicar manualmente em **Actions → Deploy frontend to GitHub Pages → Run workflow**.
 4. O site fica em `https://bycmlla.github.io/English_Studies/`.
 5. No Render, defina `CORS_ORIGINS=https://bycmlla.github.io` (apenas a origem, sem `/English_Studies`).
 
