@@ -1,0 +1,32 @@
+# Blueprint opcional do Render (New > Blueprint). Cria o banco e o serviço da API.
+# Segredos marcados com sync:false são pedidos no painel; nunca coloque valores aqui.
+databases:
+  - name: english-journey-db
+    plan: free
+    databaseName: journey
+    user: journey
+
+services:
+  - type: web
+    name: my-english-journey-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: english-journey-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://bycmlla.github.io
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
