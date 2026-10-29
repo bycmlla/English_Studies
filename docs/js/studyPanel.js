@@ -2,6 +2,8 @@
 // cada assunto com seu próprio checkbox. Não compartilha estado com Student's Book / Workbook.
 import { h, icon, formatPercent } from './dom.js';
 import { toast } from './ui.js';
+import { ENGLISH_SLUG } from './router.js';
+import { createMaterialsBoard } from './materialsBoard.js';
 import {
   study, loadStudy, subscribeStudy, toggleTopic, groupByCategory,
   unitProgress, bookProgress, overallProgress,
@@ -36,6 +38,38 @@ function progressBar(label, extraClass = '') {
 }
 
 const countText = (p) => `${p.completed} de ${p.total} assuntos estudados`;
+
+/**
+ * Seção "Materiais" da aba (abaixo de Progresso de estudo): o mesmo quadro de Materiais de Estudo,
+ * fixo no My English Journey. Começa fechada e só carrega os materiais na primeira abertura.
+ */
+function createMaterialsSection() {
+  const bodyId = 'study-materials-body';
+  const toggle = h('button', { class: 'section-toggle', type: 'button', 'aria-expanded': 'false', 'aria-controls': bodyId },
+    h('span', {}, 'Materiais'),
+    h('span', { class: 'chevron' }, icon('chevron', 18)));
+  const body = h('div', { id: bodyId, class: 'study-materials-body', hidden: true });
+  const section = h('section', { class: 'overview study-materials', 'aria-labelledby': 'study-materials-title' },
+    h('h2', { id: 'study-materials-title', class: 'overview-title' }, toggle),
+    body);
+
+  let board = null;
+  toggle.addEventListener('click', () => {
+    const open = toggle.getAttribute('aria-expanded') !== 'true';
+    toggle.setAttribute('aria-expanded', String(open));
+    section.classList.toggle('is-open', open);
+    body.hidden = !open;
+    if (open && !board) {
+      board = createMaterialsBoard({ courses: [{ slug: ENGLISH_SLUG, title: 'My English Journey' }], slug: ENGLISH_SLUG });
+      body.append(
+        h('p', { class: 'overview-note mat-intro' },
+          'Seus links de apoio por nível, categoria e unidade. Abrir um link não conclui nenhuma unidade nem altera o progresso.'),
+        board.el);
+      board.start();
+    }
+  });
+  return section;
+}
 
 export function createStudyPanel() {
   const state = { filter: 'all' };
@@ -73,7 +107,9 @@ export function createStudyPanel() {
   const booksEl = h('section', { class: 'books', 'aria-label': 'Conteúdos de estudo por nível' });
   const status = h('div', { class: 'study-status' });
 
-  root.append(overview, filterBar, status, booksEl);
+  const materialsSection = createMaterialsSection();
+
+  root.append(overview, materialsSection, filterBar, status, booksEl);
 
   function setFilter(id) {
     state.filter = id;

@@ -1480,6 +1480,11 @@ main:focus {
   min-height: 42px;
 }
 
+.mat-toolbar select.input {
+  padding-inline: 10px;
+  font-size: 0.92rem;
+}
+
 .mat-toolbar .btn {
   min-height: 42px;
   white-space: nowrap;
@@ -1612,6 +1617,27 @@ main:focus {
 
 .mat-empty {
   padding: 2px;
+}
+
+/* seção Materiais dentro de Conteúdos de Estudo */
+.study-materials .overview-title {
+  margin-bottom: 0;
+}
+
+.study-materials.is-open .overview-title {
+  margin-bottom: 8px;
+}
+
+.study-materials .chevron {
+  transform: rotate(0deg);
+}
+
+.study-materials.is-open .chevron {
+  transform: rotate(180deg);
+}
+
+.study-materials .mat-intro {
+  margin: 0 0 14px;
 }
 
 /* formulário e categorias (diálogos) */

@@ -115,8 +115,8 @@ test('frontend: Meus Estudos não tem percentuais fixos no código', () => {
 });
 
 test('frontend: Materiais de Estudo não traz links nem materiais fixos no código', () => {
-  const content = fs.readFileSync(path.join(DOCS, 'js', 'materialsPage.js'), 'utf8').replace(/\/\/.*$/gm, '');
+  const content = fs.readFileSync(path.join(DOCS, 'js', 'materialsBoard.js'), 'utf8').replace(/\/\/.*$/gm, '');
   const urls = [...content.matchAll(/https?:\/\/[A-Za-z0-9]/g)];
-  assert.equal(urls.length, 0, 'materialsPage.js tem URL fixa');
+  assert.equal(urls.length, 0, 'materialsBoard.js tem URL fixa');
   assert.match(content, /api\.getCourseMaterials/);
 });
