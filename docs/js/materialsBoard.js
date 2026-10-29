@@ -26,12 +26,13 @@ const field = (id, label, control, extra = {}) =>
   h('div', { class: 'field', ...extra }, h('label', { for: id }, label), control);
 
 /**
- * @param {{ courses: Array<{slug: string, title: string}>, slug?: string, onCourseChange?: (slug: string) => void }} options
- * Com mais de um curso mostra o seletor de curso; com um só curso fica fixo nele.
+ * Quadro de materiais de UM curso (cada curso tem os seus; nada é compartilhado entre cursos).
+ * @param {{ course: {slug: string, title: string} }} options
  */
-export function createMaterialsBoard({ courses, slug: initialSlug, onCourseChange }) {
+export function createMaterialsBoard({ course }) {
+  const courses = [course];
   const state = {
-    slug: courses.some((c) => c.slug === initialSlug) ? initialSlug : courses[0]?.slug,
+    slug: course.slug,
     data: new Map(), // slug do curso -> { course, levels, categories, materials }
     status: 'loading', // loading | ready | error
     error: '',
@@ -52,8 +53,6 @@ export function createMaterialsBoard({ courses, slug: initialSlug, onCourseChang
     state.slug = slug;
     state.filters = { q: '', category: '', unit: '' };
     searchInput.value = '';
-    onCourseChange?.(slug);
-    courseButtons.forEach((button, key) => button.setAttribute('aria-pressed', String(key === slug)));
     state.status = 'loading';
     renderAll();
     try {
@@ -68,18 +67,7 @@ export function createMaterialsBoard({ courses, slug: initialSlug, onCourseChang
     renderAll();
   }
 
-  // ---------- cabeçalho, seletor de curso e barra de ferramentas ----------
-  const courseButtons = new Map();
-  const picker = h('div', { class: 'filter course-picker', role: 'group', 'aria-label': 'Curso' },
-    courses.map((course) => {
-      const button = h('button', {
-        class: 'filter-btn', type: 'button', 'aria-pressed': String(course.slug === state.slug),
-        onClick: () => { if (course.slug !== state.slug) selectCourse(course.slug); },
-      }, course.title);
-      courseButtons.set(course.slug, button);
-      return button;
-    }));
-
+  // ---------- barra de ferramentas ----------
   const searchInput = h('input', {
     id: 'mat-search', class: 'input', type: 'search', placeholder: 'Pesquisar pelo nome…', autocomplete: 'off',
     maxlength: 160, onInput: () => { state.filters.q = searchInput.value; renderContent(); },
@@ -250,9 +238,9 @@ export function createMaterialsBoard({ courses, slug: initialSlug, onCourseChang
   // ---------- cadastro / edição ----------
   async function openForm({ material = null, preset = {} } = {}) {
     const editing = Boolean(material);
-    let slug = state.slug;
+    const slug = state.slug;
 
-    const courseSel = h('select', { id: 'mf-course', class: 'input', disabled: editing },
+    const courseSel = h('select', { id: 'mf-course', class: 'input', disabled: true }, // curso fixo: cada curso tem os seus materiais
       courses.map((c) => option(c.slug, c.title)));
     courseSel.value = slug;
     const levelSel = h('select', { id: 'mf-level', class: 'input' });
@@ -288,18 +276,6 @@ export function createMaterialsBoard({ courses, slug: initialSlug, onCourseChang
     }
     levelSel.addEventListener('change', syncDependents);
     catSel.addEventListener('change', () => { syncDependents(); if (!newCatField.hidden) newCat.focus(); });
-    courseSel.addEventListener('change', async () => {
-      try {
-        slug = courseSel.value;
-        await load(slug);
-        fill();
-      } catch (err) {
-        slug = state.slug;
-        courseSel.value = slug;
-        toast(`Não foi possível carregar o curso. ${err.message}`, { type: 'error' });
-      }
-    });
-
     fill({
       book: material?.bookSlug ?? preset.book,
       unit: material?.unitNumber ?? preset.unit,
@@ -482,12 +458,11 @@ export function createMaterialsBoard({ courses, slug: initialSlug, onCourseChang
     });
   }
 
-  const el = h('div', { class: 'mat-board' }, courses.length > 1 ? picker : null, toolbar, summary, content);
+  const el = h('div', { class: 'mat-board' }, toolbar, summary, content);
 
-  /** Carrega e mostra o curso inicial. Chame uma vez, quando o quadro for exibido. */
+  /** Carrega e mostra os materiais do curso. Chame uma vez, quando o quadro for exibido. */
   function start() {
-    if (!state.slug) content.replaceChildren(h('p', { class: 'muted' }, 'Nenhum curso disponível.'));
-    else selectCourse(state.slug);
+    selectCourse(state.slug);
   }
 
   return { el, start };

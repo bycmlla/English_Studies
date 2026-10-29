@@ -8,7 +8,6 @@ import { renderLogin } from './login.js';
 import { renderDashboard } from './dashboard.js';
 import { renderHub } from './hub.js';
 import { renderCoursePage } from './coursePage.js';
-import { renderMaterialsPage } from './materialsPage.js';
 import { initToTop } from './toTop.js';
 import { ENGLISH_SLUG, hrefTo, parseRoute, replaceHash, screenKey } from './router.js';
 
@@ -138,20 +137,6 @@ async function start() {
     if (stale()) return;
     leaveCurrentView();
     teardown = renderHub(root, { courses, onLogout: logout });
-    return focusMain();
-  }
-
-  if (route.view === 'materials') {
-    showLoading('Carregando seus materiais…');
-    let courses;
-    try {
-      courses = await api.listCourses();
-    } catch (err) {
-      return failed(err);
-    }
-    if (stale()) return;
-    leaveCurrentView();
-    teardown = renderMaterialsPage(root, { courses, courseSlug: route.sub, onLogout: logout });
     return focusMain();
   }
 

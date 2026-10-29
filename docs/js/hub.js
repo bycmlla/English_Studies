@@ -2,7 +2,7 @@
 // que está salvo no banco); aqui nada é fixo.
 import { h, formatPercent } from './dom.js';
 import { hrefTo } from './router.js';
-import { themeButton, coverEl, logoutButton, topNav } from './chrome.js';
+import { themeButton, coverEl, logoutButton } from './chrome.js';
 
 const STATUS_LABEL = { not_started: 'Não iniciado', studying: 'concluído', completed: 'Concluído' };
 
@@ -41,7 +41,6 @@ export function renderHub(root, { courses, onLogout }) {
   const main = h(
     'main',
     { id: 'main', tabindex: '-1' },
-    topNav('hub'),
     coverEl(),
     h(
       'div',

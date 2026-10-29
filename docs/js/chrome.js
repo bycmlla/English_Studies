@@ -1,6 +1,6 @@
 // Peças de interface compartilhadas pelas telas (Meus Estudos, My English Journey, cursos).
 import { h, icon } from './dom.js';
-import { hrefTo, materialsHref } from './router.js';
+import { hrefTo } from './router.js';
 
 // ---------- tema ----------
 
@@ -47,16 +47,4 @@ export function logoutButton(onLogout) {
 /** Link para a tela Meus Estudos (sem novo login). */
 export function backLink() {
   return h('a', { class: 'back-link', href: hrefTo() }, icon('back', 16), 'Voltar aos meus estudos');
-}
-
-/**
- * Menu superior do site. `active` = 'hub' (Meus Estudos e as páginas dos cursos) ou 'materials'.
- */
-export function topNav(active) {
-  const item = (id, label, href) =>
-    h('a', { class: 'topnav-link', href, 'aria-current': active === id ? 'page' : undefined }, label);
-  return h('nav', { class: 'topnav', 'aria-label': 'Navegação principal' },
-    h('div', { class: 'topnav-inner' },
-      item('hub', 'Meus Estudos', hrefTo()),
-      item('materials', 'Materiais de Estudo', materialsHref())));
 }

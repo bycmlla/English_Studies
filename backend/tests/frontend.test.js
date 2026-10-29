@@ -120,3 +120,13 @@ test('frontend: Materiais de Estudo não traz links nem materiais fixos no códi
   assert.equal(urls.length, 0, 'materialsBoard.js tem URL fixa');
   assert.match(content, /api\.getCourseMaterials/);
 });
+
+test('frontend: Materiais fica dentro de cada curso (sem menu superior nem página global)', () => {
+  const js = (name) => fs.readFileSync(path.join(DOCS, 'js', name), 'utf8');
+  assert.ok(!fs.existsSync(path.join(DOCS, 'js', 'materialsPage.js')), 'página global de materiais removida');
+  for (const name of fs.readdirSync(path.join(DOCS, 'js'))) {
+    assert.ok(!/topNav|topnav|materialsHref|renderMaterialsPage/.test(js(name)), `${name} ainda referencia o menu superior`);
+  }
+  assert.match(js('studyPanel.js'), /createMaterialsSection/, 'inglês: Materiais em Conteúdos de Estudo');
+  assert.match(js('coursePage.js'), /createMaterialsSection/, 'outros cursos: Materiais na página do curso');
+});

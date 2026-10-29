@@ -3,7 +3,8 @@
 // banco. Enquanto não houver módulos cadastrados, a página mostra 0% / "Não iniciado".
 import * as api from './api.js';
 import { h, formatPercent } from './dom.js';
-import { themeButton, coverEl, logoutButton, backLink, topNav } from './chrome.js';
+import { themeButton, coverEl, logoutButton, backLink } from './chrome.js';
+import { createMaterialsSection } from './materialsSection.js';
 import { onSyncChange, track } from './sync.js';
 import { toast } from './ui.js';
 
@@ -112,7 +113,6 @@ export function renderCoursePage(root, { course, onLogout }) {
   const main = h(
     'main',
     { id: 'main', tabindex: '-1' },
-    topNav('hub'),
     coverEl(),
     h(
       'div',
@@ -124,6 +124,7 @@ export function renderCoursePage(root, { course, onLogout }) {
           h('p', { class: 'subtitle' }, course.description)),
         h('div', { class: 'header-actions' }, syncChip, themeButton(), logoutButton(onLogout))),
       overview,
+      createMaterialsSection({ slug: course.slug, title: course.title }),
       modulesEl,
     ),
   );

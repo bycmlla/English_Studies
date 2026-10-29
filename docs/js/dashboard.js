@@ -7,7 +7,7 @@ import { createBookPanel } from './bookPanel.js';
 import { openSettings } from './settings.js';
 import { createStudyPanel } from './studyPanel.js';
 import { clearStudy } from './studyStore.js';
-import { themeButton, coverEl, logoutButton, backLink, topNav } from './chrome.js';
+import { themeButton, coverEl, logoutButton, backLink } from './chrome.js';
 import { ENGLISH_SLUG, hrefTo, parseRoute, replaceHash } from './router.js';
 
 const SYNC_TEXT = {
@@ -232,7 +232,6 @@ export function renderDashboard(root, { session, onLogout, onDataChanged }) {
   const main = h(
     'main',
     { id: 'main', tabindex: '-1' },
-    topNav('hub'),
     coverEl(),
     h(
       'div',
