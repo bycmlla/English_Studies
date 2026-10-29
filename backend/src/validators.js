@@ -96,6 +96,73 @@ function validateUnitUpdate(body) {
   return { completed: body.completed, bookType };
 }
 
+/** Corpo de PUT de assunto/aula -> { completed }. */
+function validateCompletedUpdate(body) {
+  if (!isPlainObject(body) || typeof body.completed !== 'boolean') {
+    throw badRequest('Informe "completed" como true ou false.');
+  }
+  return { completed: body.completed };
+}
+
+const MAX_MATERIAL_NAME_LENGTH = 160;
+const MAX_MATERIAL_DESCRIPTION_LENGTH = 500;
+const MAX_CATEGORY_NAME_LENGTH = 60;
+
+/** Corpo de POST/PUT de material de curso (Materiais de Estudo). */
+function validateCourseMaterial(body) {
+  if (!isPlainObject(body)) throw badRequest('Corpo da requisição inválido.');
+  const errors = [];
+
+  const title = typeof body.title === 'string' ? body.title.trim() : '';
+  if (!title) errors.push('Informe o nome do material.');
+  else if (title.length > MAX_MATERIAL_NAME_LENGTH) errors.push(`O nome deve ter no máximo ${MAX_MATERIAL_NAME_LENGTH} caracteres.`);
+
+  const url = typeof body.url === 'string' ? body.url.trim() : '';
+  if (!url) errors.push('Informe a URL do material.');
+  else if (url.length > MAX_URL_LENGTH) errors.push(`A URL deve ter no máximo ${MAX_URL_LENGTH} caracteres.`);
+  else {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') errors.push('A URL deve começar com http:// ou https://.');
+    } catch {
+      errors.push('URL inválida.');
+    }
+  }
+
+  let description = '';
+  if (body.description !== undefined && body.description !== null && body.description !== '') {
+    if (typeof body.description !== 'string') errors.push('A descrição deve ser texto.');
+    else {
+      description = body.description.trim();
+      if (description.length > MAX_MATERIAL_DESCRIPTION_LENGTH) {
+        errors.push(`A descrição deve ter no máximo ${MAX_MATERIAL_DESCRIPTION_LENGTH} caracteres.`);
+      }
+    }
+  }
+
+  const categoryId = body.categoryId;
+  if (!Number.isInteger(categoryId) || categoryId < 1) errors.push('Escolha a categoria.');
+
+  const bookSlug = body.bookSlug ?? null;
+  if (bookSlug !== null && (typeof bookSlug !== 'string' || bookSlug.length > 40)) errors.push('Nível inválido.');
+
+  const unitNumber = body.unitNumber ?? null;
+  if (unitNumber !== null && (!Number.isInteger(unitNumber) || unitNumber < 1 || unitNumber > UNITS_PER_BOOK)) {
+    errors.push(`A unidade deve estar entre 1 e ${UNITS_PER_BOOK}.`);
+  }
+
+  if (errors.length > 0) throw badRequest(errors[0], errors);
+  return { title, url, description: description || null, categoryId, bookSlug, unitNumber };
+}
+
+/** Corpo de POST/PUT de categoria -> { name }. */
+function validateCategoryName(body) {
+  const name = isPlainObject(body) && typeof body.name === 'string' ? body.name.trim().replace(/\s+/g, ' ') : '';
+  if (!name) throw badRequest('Informe o nome da categoria.');
+  if (name.length > MAX_CATEGORY_NAME_LENGTH) throw badRequest(`O nome deve ter no máximo ${MAX_CATEGORY_NAME_LENGTH} caracteres.`);
+  return { name };
+}
+
 function validateMaterial(body) {
   const { errors, value } = checkMaterial(body);
   if (errors.length > 0) throw badRequest(errors[0], errors);
@@ -173,6 +240,22 @@ function validateBackup(data, validSlugs) {
     const workbookCompletedUnits =
       entry.workbookCompletedUnits === undefined ? null : unitList('workbookCompletedUnits', entry.workbookCompletedUnits);
 
+    // studyTopics = ids dos assuntos de Conteúdos de Estudo concluídos. Opcional: backups
+    // anteriores não o trazem, e então o progresso de estudo existente não é alterado (null).
+    let studyTopics = null;
+    if (entry.studyTopics !== undefined) {
+      if (
+        !Array.isArray(entry.studyTopics) ||
+        entry.studyTopics.length > 5000 ||
+        entry.studyTopics.some((id) => !Number.isInteger(id) || id < 10101 || id > 99999) ||
+        new Set(entry.studyTopics).size !== entry.studyTopics.length
+      ) {
+        errors.push(`${label}: studyTopics deve ser uma lista de ids únicos de assuntos`);
+      } else {
+        studyTopics = [...entry.studyTopics].sort((a, b) => a - b);
+      }
+    }
+
     const notes = entry.notes ?? '';
     if (typeof notes !== 'string' || notes.length > MAX_NOTES_LENGTH) {
       errors.push(`${label}: notes deve ser texto de até ${MAX_NOTES_LENGTH} caracteres`);
@@ -194,6 +277,7 @@ function validateBackup(data, validSlugs) {
       slug: entry.slug,
       completedUnits,
       workbookCompletedUnits,
+      studyTopics,
       notes: typeof notes === 'string' ? notes : '',
       materials,
     });
@@ -213,7 +297,10 @@ module.exports = {
   parseUnitNumber,
   parseId,
   validateUnitUpdate,
+  validateCompletedUpdate,
   validateMaterial,
+  validateCourseMaterial,
+  validateCategoryName,
   validateNotes,
   validateBackup,
 };

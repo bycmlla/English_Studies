@@ -141,6 +141,12 @@ test('endpoints privados exigem token válido', async () => {
     ['post', '/api/books/intro/materials'],
     ['get', '/api/books/intro/notes'],
     ['put', '/api/books/intro/notes'],
+    ['get', '/api/courses'],
+    ['get', '/api/courses/english-journey/materials'],
+    ['post', '/api/courses/english-journey/materials'],
+    ['get', '/api/courses/make-10-hundred'],
+    ['get', '/api/study'],
+    ['put', '/api/study/topics/10101'],
     ['get', '/api/progress/overview'],
     ['get', '/api/backup/export'],
     ['post', '/api/backup/import'],
@@ -480,7 +486,7 @@ test('backup: exportar e importar em um banco limpo reproduz progresso, materiai
   const imported = await target.post('/api/backup/import', exported.body);
   assert.equal(imported.status, 200);
   assert.equal(imported.body.imported, true);
-  assert.deepEqual(imported.body.summary, { books: 4, studentBookUnits: 3, workbookUnits: 2, materials: 1, notes: 1 });
+  assert.deepEqual(imported.body.summary, { books: 4, studentBookUnits: 3, workbookUnits: 2, materials: 1, notes: 1, studyTopics: 0 });
 
   const books = (await target.get('/api/books')).body.books;
   assert.deepEqual(books.map((b) => b.studentBook.completed), [2, 0, 0, 1]);
@@ -516,7 +522,7 @@ test('backup v1 (antigo, sem Workbook) importa o Student\'s Book e não apaga o 
   const v1 = { app: 'my-english-journey', version: 1, books: [{ slug: 'intro', completedUnits: [1, 2] }] };
   const res = await t.post('/api/backup/import', v1);
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body.summary, { books: 1, studentBookUnits: 2, workbookUnits: 0, materials: 0, notes: 0 });
+  assert.deepEqual(res.body.summary, { books: 1, studentBookUnits: 2, workbookUnits: 0, materials: 0, notes: 0, studyTopics: 0 });
   const { book } = (await t.get('/api/books/intro')).body;
   assert.deepEqual(book.studentBook.completedUnitNumbers, [1, 2]);
   assert.deepEqual(book.workbook.completedUnitNumbers, [7], 'Workbook preservado');

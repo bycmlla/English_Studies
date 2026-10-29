@@ -7,6 +7,9 @@ const { AppError } = require('../errors');
 const { requireAuth } = require('../middleware/auth');
 const auth = require('../controllers/authController');
 const c = require('../controllers/booksController');
+const study = require('../controllers/studyController');
+const courses = require('../controllers/coursesController');
+const cm = require('../controllers/courseMaterialsController');
 
 function createApiRouter(config) {
   const router = express.Router();
@@ -42,6 +45,24 @@ function createApiRouter(config) {
 
   router.get('/books/:bookSlug/notes', c.getNotes);
   router.put('/books/:bookSlug/notes', c.saveNotes);
+
+  // Meus Estudos: cursos, módulos e aulas (progresso independente por curso).
+  router.get('/courses', courses.list);
+  router.get('/courses/:courseSlug', courses.show);
+  router.put('/courses/:courseSlug/lessons/:lessonId', courses.updateLesson);
+
+  // Materiais de Estudo: links de apoio por curso/nível/unidade e categorias (do usuário autenticado).
+  router.get('/courses/:courseSlug/materials', cm.list);
+  router.post('/courses/:courseSlug/materials', cm.create);
+  router.put('/courses/:courseSlug/materials/:materialId', cm.update);
+  router.delete('/courses/:courseSlug/materials/:materialId', cm.remove);
+  router.post('/courses/:courseSlug/material-categories', cm.createCategory);
+  router.put('/courses/:courseSlug/material-categories/:categoryId', cm.renameCategory);
+  router.delete('/courses/:courseSlug/material-categories/:categoryId', cm.removeCategory);
+
+  // Conteúdos de Estudo (independentes do progresso de Student's Book / Workbook).
+  router.get('/study', study.list);
+  router.put('/study/topics/:topicId', study.updateTopic);
 
   router.get('/progress/overview', c.overview);
 

@@ -30,7 +30,7 @@ test('migration 003: preserva o progresso existente como Student\'s Book e liber
 
   // 2) Atualiza com todas as migrations.
   const applied = await runMigrations(pool, { logger, lock: false });
-  assert.deepEqual(applied, ['003_workbook_progress.sql']);
+  assert.deepEqual(applied, ['003_workbook_progress.sql', '004_study_contents.sql', '005_seed_study_contents.sql', '006_courses.sql', '007_course_materials.sql']);
 
   const { rows } = await pool.query('SELECT unit_id, completed, book_type FROM unit_progress ORDER BY unit_id');
   assert.equal(rows.length, 3, 'nenhuma linha perdida');
