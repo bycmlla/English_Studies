@@ -10,6 +10,27 @@ import { toast, modal, confirmDialog } from './ui.js';
 // a API ainda aceita `workbook` e `audio`, mas a tela não os exibe.
 const MATERIAL_KINDS = [{ kind: 'student_book', label: 'Important links' }];
 
+// ---------- seção que abre e fecha ----------
+
+/** Seção com título clicável (abre/fecha o conteúdo). Começa fechada. */
+function collapsibleSection(title, content, { open = false } = {}) {
+  const toggle = h(
+    'button',
+    { class: 'section-toggle', type: 'button', 'aria-expanded': String(open), 'aria-controls': content.id },
+    h('span', {}, title),
+    h('span', { class: 'chevron' }, icon('chevron', 18)),
+  );
+  const section = h('section', { class: `panel-section collapsible${open ? ' is-open' : ''}` }, h('h3', { class: 'section-title' }, toggle), content);
+  content.hidden = !open;
+  toggle.addEventListener('click', () => {
+    const next = toggle.getAttribute('aria-expanded') !== 'true';
+    toggle.setAttribute('aria-expanded', String(next));
+    section.classList.toggle('is-open', next);
+    content.hidden = !next;
+  });
+  return section;
+}
+
 // ---------- unidades ----------
 
 /** Bloco de progresso de um material (Student's Book ou Workbook): título, %, barra e contagem. */
@@ -52,7 +73,7 @@ function unitsSections(slug) {
   };
   const fullyLine = h('p', { class: 'muted full-line', role: 'status' });
 
-  const list = h('ul', { class: 'unit-rows', 'aria-label': `Unidades de ${book.title}` });
+  const list = h('ul', { id: `unit-rows-${slug}`, class: 'unit-rows', 'aria-label': `Unidades de ${book.title}` });
   for (let number = 1; number <= book.totalUnits; number += 1) {
     const toggle = (bookType) => {
       const label = BOOK_TYPE_LABEL[bookType];
@@ -118,7 +139,7 @@ function unitsSections(slug) {
       h('div', { class: 'material-progress' }, blocks.student_book.el, blocks.workbook.el),
       fullyLine,
     ),
-    h('section', { class: 'panel-section' }, h('h3', { class: 'section-title' }, 'Unidades'), list),
+    collapsibleSection('Unidades', list),
   ];
 }
 

@@ -88,3 +88,35 @@ test('frontend: sem innerHTML/eval (conteúdo dinâmico só via textContent)', (
     assert.ok(!/\.innerHTML\s*=|insertAdjacentHTML|\beval\(|new Function\(/.test(content), path.basename(file));
   }
 });
+
+test('frontend: cálculo de porcentagem de assuntos (8 de 10 = 80%) idêntico ao do backend', async () => {
+  const front = await import(path.join(DOCS, 'js', 'progress.js').replace(/\\/g, '/').replace(/^([A-Za-z]):/, 'file:///$1:'));
+  for (const total of [1, 7, 10, 15, 678]) {
+    for (let done = 0; done <= Math.min(total, 40); done += 1) {
+      assert.equal(front.calculatePercent(done, total), backendProgress.calculatePercent(done, total), `${done}/${total}`);
+    }
+  }
+  assert.equal(front.calculatePercent(8, 10), 80);
+});
+
+test('frontend: barra de progresso de Conteúdos de Estudo usa #fed353', () => {
+  const css = fs.readFileSync(path.join(DOCS, 'css', 'styles.css'), 'utf8');
+  assert.match(css, /--study-bar:\s*#fed353/i);
+  assert.match(css, /\.study-panel \.progress-fill\s*\{[^}]*background:\s*var\(--study-bar\)/);
+});
+
+test('frontend: Meus Estudos não tem percentuais fixos no código', () => {
+  for (const name of ['hub.js', 'coursePage.js']) {
+    const content = fs.readFileSync(path.join(DOCS, 'js', name), 'utf8');
+    assert.ok(!/\b(70|10)\s*%/.test(content.replace(/\/\/.*$/gm, '')), `${name} tem porcentagem fixa`);
+  }
+  const hub = fs.readFileSync(path.join(DOCS, 'js', 'hub.js'), 'utf8');
+  assert.match(hub, /course\.progress/);
+});
+
+test('frontend: Materiais de Estudo não traz links nem materiais fixos no código', () => {
+  const content = fs.readFileSync(path.join(DOCS, 'js', 'materialsPage.js'), 'utf8').replace(/\/\/.*$/gm, '');
+  const urls = [...content.matchAll(/https?:\/\/[A-Za-z0-9]/g)];
+  assert.equal(urls.length, 0, 'materialsPage.js tem URL fixa');
+  assert.match(content, /api\.getCourseMaterials/);
+});

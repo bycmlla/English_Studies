@@ -5,37 +5,16 @@ import { store, subscribe, resetSubscribers, viewOf, overview, getBook, refreshB
 import { onSyncChange } from './sync.js';
 import { createBookPanel } from './bookPanel.js';
 import { openSettings } from './settings.js';
+import { createStudyPanel } from './studyPanel.js';
+import { clearStudy } from './studyStore.js';
+import { themeButton, coverEl, logoutButton, backLink, topNav } from './chrome.js';
+import { ENGLISH_SLUG, hrefTo, parseRoute, replaceHash } from './router.js';
 
 const SYNC_TEXT = {
   saving: 'Salvando…',
   saved: 'Salvo',
   error: 'Erro ao salvar',
 };
-
-// ---------- tema ----------
-
-const effectiveTheme = () =>
-  document.documentElement.getAttribute('data-theme') ||
-  (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  try { localStorage.setItem('mej.theme', theme); } catch { /* preferência vale só nesta sessão */ }
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#191919' : '#fbfbfa');
-}
-
-function themeButton() {
-  const button = h('button', { class: 'icon-btn icon-btn-lg', type: 'button' });
-  const refresh = () => {
-    const dark = effectiveTheme() === 'dark';
-    button.replaceChildren(icon(dark ? 'sun' : 'moon', 20));
-    button.setAttribute('aria-label', dark ? 'Mudar para o modo claro' : 'Mudar para o modo escuro');
-    button.title = dark ? 'Modo claro' : 'Modo escuro';
-  };
-  button.addEventListener('click', () => { applyTheme(effectiveTheme() === 'dark' ? 'light' : 'dark'); refresh(); });
-  refresh();
-  return button;
-}
 
 // ---------- visão geral ----------
 
@@ -152,10 +131,56 @@ function createCard(slug) {
   return { slug, el, update };
 }
 
+// ---------- abas: Livros | Conteúdos de Estudo ----------
+
+const TABS = [
+  { id: 'books', label: 'Livros', hash: hrefTo(ENGLISH_SLUG) },
+  { id: 'study', label: 'Conteúdos de Estudo', hash: hrefTo(ENGLISH_SLUG, 'estudo') },
+];
+
+function createTabs(panels, { onShow }) {
+  const buttons = new Map();
+  const tablist = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Seções' },
+    TABS.map((tab) => {
+      const button = h('button', {
+        class: 'tab', type: 'button', role: 'tab', id: `tab-${tab.id}`,
+        'aria-controls': `tabpanel-${tab.id}`, 'aria-selected': 'false', tabindex: '-1',
+        onClick: () => select(tab.id),
+        onKeydown: (event) => {
+          const index = TABS.findIndex((t) => t.id === tab.id);
+          const next = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: TABS.length - 1 }[event.key];
+          if (next === undefined) return;
+          event.preventDefault();
+          const target = TABS[(next + TABS.length) % TABS.length];
+          select(target.id);
+          buttons.get(target.id).focus();
+        },
+      }, tab.label);
+      buttons.set(tab.id, button);
+      return button;
+    }));
+
+  function select(id, { updateHash = true } = {}) {
+    for (const tab of TABS) {
+      const active = tab.id === id;
+      const button = buttons.get(tab.id);
+      button.setAttribute('aria-selected', String(active));
+      button.tabIndex = active ? 0 : -1;
+      panels[tab.id].hidden = !active;
+    }
+    if (updateHash) replaceHash(TABS.find((t) => t.id === id).hash);
+    onShow(id);
+  }
+
+  const fromHash = () => (parseRoute().sub === 'estudo' ? 'study' : 'books');
+  return { el: tablist, select, selectFromHash: () => select(fromHash(), { updateHash: false }) };
+}
+
 // ---------- página ----------
 
 export function renderDashboard(root, { session, onLogout, onDataChanged }) {
   resetSubscribers();
+  clearStudy(); // sempre relê o estudo do servidor (ex.: após importar um backup)
 
   const syncChip = h('span', { class: 'sync-chip', role: 'status', 'aria-live': 'polite' });
   const unsubscribeSync = onSyncChange((state) => {
@@ -166,6 +191,15 @@ export function renderDashboard(root, { session, onLogout, onDataChanged }) {
 
   const overviewView = createOverview();
   const cards = store.books.map((book) => createCard(book.slug));
+  const studyPanel = createStudyPanel();
+
+  const booksTab = h('div', { id: 'tabpanel-books', role: 'tabpanel', 'aria-labelledby': 'tab-books' },
+    overviewView.el,
+    h('section', { class: 'books', 'aria-label': 'Livros da coleção Interchange' }, cards.map((card) => card.el)));
+  const studyTab = h('div', { id: 'tabpanel-study', role: 'tabpanel', 'aria-labelledby': 'tab-study', hidden: true }, studyPanel.el);
+  const tabs = createTabs({ books: booksTab, study: studyTab }, {
+    onShow: (id) => { if (id === 'study') studyPanel.onShow(); },
+  });
 
   const header = h(
     'header',
@@ -185,6 +219,7 @@ export function renderDashboard(root, { session, onLogout, onDataChanged }) {
         class: 'icon-btn icon-btn-lg', type: 'button', title: 'Backup e conta', 'aria-label': 'Abrir backup e conta',
         onClick: () => openSettings({ session, onLogout, onDataChanged }),
       }, icon('settings', 20)),
+      logoutButton(onLogout),
     ),
   );
 
@@ -197,25 +232,25 @@ export function renderDashboard(root, { session, onLogout, onDataChanged }) {
   const main = h(
     'main',
     { id: 'main', tabindex: '-1' },
-    h(
-      'picture',
-      { class: 'cover' },
-      // Desktop: capa larga; celular (até 720px): capa estreita.
-      h('source', { media: '(min-width: 721px)', srcset: 'cover_desktop.png' }),
-      h('img', { src: 'cover.jpg', alt: '', width: 736, height: 149, decoding: 'async' }),
-    ),
+    topNav('hub'),
+    coverEl(),
     h(
       'div',
       { class: 'page' },
       h('img', { class: 'page-icon', src: 'book.png', alt: '', width: 330, height: 326 }),
+      backLink(),
       header,
-      overviewView.el,
-      h('section', { class: 'books', 'aria-label': 'Livros da coleção Interchange' }, cards.map((card) => card.el)),
+      tabs.el,
+      booksTab,
+      studyTab,
     ),
   );
 
   root.replaceChildren(main);
   refreshAll();
+  tabs.selectFromHash();
+  const onHashChange = () => tabs.selectFromHash();
+  window.addEventListener('hashchange', onHashChange);
 
   subscribe((event) => {
     if (event.type === 'reload') {
@@ -239,6 +274,8 @@ export function renderDashboard(root, { session, onLogout, onDataChanged }) {
     unsubscribeSync();
     resetSubscribers();
     document.removeEventListener('visibilitychange', onVisible);
+    window.removeEventListener('hashchange', onHashChange);
+    studyPanel.destroy();
   };
 }
 

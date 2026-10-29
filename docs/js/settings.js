@@ -48,6 +48,7 @@ function summaryList(summary) {
     h('li', {}, `${summary.studentBookUnits} unidade(s) do Student's Book`),
     h('li', {}, `${summary.workbookUnits} unidade(s) do Workbook`),
     h('li', {}, `${summary.materials} link(s) de materiais`),
+    h('li', {}, `${summary.studyTopics ?? 0} assunto(s) de Conteúdos de Estudo`),
   );
 }
 
@@ -107,7 +108,7 @@ export function openSettings({ session, onLogout, onDataChanged }) {
       'div',
       { class: 'settings-group' },
       h('h3', { class: 'section-title' }, 'Backup'),
-      h('p', { class: 'muted' }, 'Inclui o progresso e os links de materiais.'),
+      h('p', { class: 'muted' }, 'Inclui o progresso dos livros, os links de materiais e o progresso de Conteúdos de Estudo.'),
       h(
         'div',
         { class: 'settings-actions' },

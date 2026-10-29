@@ -19,19 +19,26 @@ Painel pessoal para acompanhar o progresso nos livros **Interchange Fifth Editio
 │       ├── api.js             # Cliente REST, sessão (token), retries / servidor lento
 │       ├── store.js           # Estado + marcar/desmarcar com rollback em falha
 │       ├── progress.js        # Cálculo de progresso (espelha o backend)
-│       ├── dashboard.js       # Cabeçalho, visão geral, cartões
+│       ├── router.js          # Rotas por hash: Meus Estudos, curso, aba do curso
+│       ├── hub.js             # Tela Meus Estudos (cards de cursos)
+│       ├── materialsPage.js   # Materiais de Estudo (links por curso/nível/categoria/unidade)
+│       ├── coursePage.js      # Página de curso por módulos/aulas (Make 10 Hundred)
+│       ├── chrome.js          # Tema, capa, botões Voltar/Sair compartilhados
+│       ├── dashboard.js       # My English Journey: cabeçalho, visão geral, cartões, abas
 │       ├── bookPanel.js       # Unidades e Study Materials
+│       ├── studyPanel.js      # Aba Conteúdos de Estudo (níveis, unidades, assuntos, filtro)
+│       ├── studyStore.js      # Estado dos assuntos + marcar/desmarcar com rollback
 │       ├── settings.js        # Backup (exportar/importar) e sair
 │       ├── login.js, ui.js, sync.js, dom.js, theme-init.js
 ├── backend/
-│   ├── migrations/            # SQL versionado (001_init, 002_seed_books_units)
+│   ├── migrations/            # SQL versionado (001_init … 007_course_materials)
 │   ├── src/
 │   │   ├── server.js          # Boot: migrations → usuário inicial → listen
 │   │   ├── app.js             # Express: helmet, CORS, rotas, erros
 │   │   ├── config.js          # Variáveis de ambiente (validação)
 │   │   ├── routes/            # Definição das rotas
 │   │   ├── controllers/       # Camada HTTP (validação → serviço → resposta)
-│   │   ├── services/          # Regras e acesso ao banco (progress, books, materials, notes, backup, auth, users)
+│   │   ├── services/          # Regras e acesso ao banco (progress, books, courses, courseMaterials, study, materials, notes, backup, auth, users)
 │   │   ├── middleware/        # auth (JWT), erros centralizados, log de requisições
 │   │   ├── db/                # pool pg e executor de migrations
 │   │   └── validators.js
@@ -47,6 +54,11 @@ Painel pessoal para acompanhar o progresso nos livros **Interchange Fifth Editio
 
 ## Funcionalidades
 
+- **Materiais de Estudo** (menu superior, `#/materiais`): cadastro dinâmico de links de apoio (vídeos, áudios, materiais complementares, links úteis ou categorias próprias) para **qualquer curso**, sem lista fixa no código — nada é cadastrado automaticamente. No My English Journey os materiais ficam por nível (Intro, 1, 2, 3), categoria e unidade (Unit 1 a 16, em ordem crescente); nos demais cursos, por categoria. Botão **+ Adicionar material** (curso, nível, categoria, unidade, nome, URL, descrição), editar, excluir com confirmação, **Abrir link** em nova aba, pesquisa pelo nome (sem acentos), filtros por categoria e unidade e gerenciamento de categorias. Tudo fica no PostgreSQL e é exclusivo do usuário logado. Abrir um link **não** conclui unidade nem altera progresso. (Os "Important links" de dentro de cada livro continuam como eram, em tabela separada.)
+- **Meus Estudos** (tela inicial após o login): login → Meus Estudos → escolha do curso → página do curso. Cards azuis grandes e clicáveis com nome, descrição, percentual à direita e barra de progresso; todo percentual é calculado no servidor a partir do banco (nada fixo no código). Dentro de um curso há **Voltar aos meus estudos** (sem novo login) e **Sair**; ao sair e entrar de novo, volta a Meus Estudos. A rota fica no hash (`#/english-journey`, `#/english-journey/estudo`, `#/make-10-hundred`), então atualizar a página ou usar o botão voltar do navegador funciona.
+  - **My English Journey**: o curso de inglês de sempre, sem alterações de funcionalidade. O percentual no card é o progresso geral dos livros (atividades de Student's Book + Workbook concluídas / 128); Conteúdos de Estudo continuam com progresso próprio e não entram nessa conta.
+  - **Make 10 Hundred** (maquiagem): área criada com a estrutura pronta (módulos → aulas com checkbox e progresso), **sem conteúdo cadastrado** — aparece "Não iniciado" / 0% até os módulos serem adicionados.
+
 - Quatro cartões (Intro, 1, 2, 3) com indicador colorido, nível, **status** (Não iniciado / Estudando / Concluído), **barra de progresso larga**, porcentagem e "X de 32 atividades concluídas" (com o detalhe `Student's Book a/16 · Workbook b/16`).
 - **Student's Book e Workbook acompanhados separadamente**: cada nível tem 16 unidades × 2 = **32 conclusões**; o percentual do nível soma as duas partes. Dentro do cartão há uma barra e uma porcentagem para cada material.
 - Cada unidade tem um checkbox para o Student's Book e outro para o Workbook; só fica **"Completa"** quando os dois estão marcados.
@@ -54,7 +66,8 @@ Painel pessoal para acompanhar o progresso nos livros **Interchange Fifth Editio
 - Marcar/desmarcar atualiza as barras na hora, **salva no backend** e, se falhar, **restaura o estado anterior** e oferece "Tentar novamente". O indicador do cabeçalho só diz "Salvo" após a API confirmar.
 - **Study Materials** (grupo único "Important links"; internamente usa a chave `student_book`, e a API ainda aceita `workbook` e `audio`): adicionar, editar, abrir e remover links (apenas `http`/`https`).
 - **Visão geral**: 64 unidades, unidades completas (Student's Book + Workbook), % geral sobre as 128 atividades e livro em estudo.
-- **Backup**: exportar JSON (progresso e links); importar com validação prévia no servidor (dry-run) e confirmação antes de substituir.
+- **Conteúdos de Estudo** (aba própria, `#estudo`): os 4 níveis × 16 unidades com os assuntos de **Gramática, Vocabulário e Comunicação** (678 assuntos), cada um com seu checkbox. Níveis com a cor de sempre, unidades expansíveis, assuntos agrupados por categoria e filtro **Todos / Pendentes / Concluídos**. Progresso por unidade, por nível e total (ex.: 8 de 10 = 80%), com a barra de progresso em `#fed353` (variável `--study-bar`). Salva automaticamente, volta ao recarregar/entrar de novo e pode ser desmarcado. **É independente do Student's Book/Workbook** (tabelas e cálculo separados: nenhum lado marca o outro).
+- **Backup**: exportar JSON (progresso e links); importar com validação prévia no servidor (dry-run) e confirmação antes de substituir. O progresso de Conteúdos de Estudo vai no campo opcional `studyTopics` de cada livro; backups antigos (sem o campo) não alteram esse progresso.
 - Modo claro/escuro (preferência salva), responsivo, navegação por teclado, `prefers-reduced-motion`.
 - Aviso amigável quando o servidor gratuito do Render está "acordando".
 
@@ -112,6 +125,12 @@ CREATE DATABASE journey OWNER journey ENCODING 'UTF8';
 ```bash
 cd backend && npm run migrate     # usa DATABASE_URL do .env ou do ambiente
 ```
+
+**Migration 007 (Materiais de Estudo):** só cria tabelas novas — `material_categories` (4 categorias padrão do sistema + personalizadas por usuário e curso) e `course_materials` (usuário, curso, nível/`book_id` e `unit_number` opcionais, categoria, nome, URL e descrição). Nenhum material é cadastrado; nada existente é alterado. Roda sozinha no próximo deploy. No My English Journey a API exige o nível (a unidade é opcional); cursos sem níveis não aceitam nível nem unidade.
+
+**Migration 006 (Meus Estudos):** só cria tabelas novas — `courses` (catálogo: slug, título, descrição, `kind`), `course_modules`, `course_lessons` e `course_lesson_progress` (por usuário) — e cadastra os dois cursos. Nenhuma tabela existente é alterada. Roda sozinha no próximo deploy. Para adicionar um curso novo à tela inicial: um `INSERT` em `courses` (nova migration) com `kind = 'lessons'` e seus módulos/aulas; o card, o percentual e a página aparecem sem mexer no frontend. Cursos com `kind = 'english_journey'` usam a lógica própria dos livros.
+
+**Migrations 004 e 005 (Conteúdos de Estudo):** a 004 só cria as tabelas novas `study_topics` e `study_topic_progress` e adiciona a coluna opcional `units.title`; a 005 cadastra os títulos das 64 unidades e os 678 assuntos. Nada existente é alterado: `unit_progress` (Student's Book/Workbook) não é tocada. Ambas rodam sozinhas no próximo deploy; são idempotentes e registradas em `schema_migrations`. Listening, Reading, Writing e Pronunciation **ainda não estão cadastrados** (não constavam na lista e não foram inventados); a coluna `category` já aceita esses valores, então basta uma nova migration (ex.: `006`) com os assuntos confirmados. Não edite a 005 depois de aplicada.
 
 **Migration 003 (Workbook):** adiciona a coluna `unit_progress.book_type` (`student_book` | `workbook`) e a inclui na chave primária. Todo progresso já gravado vira `student_book` automaticamente, sem perder nada. Não exige nenhuma ação manual.
 
@@ -181,6 +200,16 @@ Todas as rotas `/api/*` (exceto login) exigem `Authorization: Bearer <token>`. E
 | GET/POST | `/api/books/:slug/materials` | Listar / criar link (`kind`: `student_book`, `workbook`, `audio`) |
 | PUT/DELETE | `/api/books/:slug/materials/:id` | Editar / remover |
 | GET/PUT | `/api/books/:slug/notes` | Anotações `{ content }` (até 20 000 caracteres) |
+| GET | `/api/courses` | Meus Estudos: cursos com `progress` `{ completed, total, percent, status }` calculado do banco |
+| GET | `/api/courses/:slug` | Um curso; nos cursos de aulas inclui `modules` → `lessons` (`id`, `title`, `completed`) com progresso por módulo. 404 `COURSE_NOT_FOUND` |
+| PUT | `/api/courses/:slug/lessons/:id` | `{ completed: true|false }` marca/desmarca uma aula (idempotente) e devolve o `progress` do curso. 404 `LESSON_NOT_FOUND` |
+| GET | `/api/courses/:slug/materials` | Materiais do usuário no curso, já ordenados (nível, unidade crescente, nome), com `levels`, `categories` (`isDefault`) e `course` |
+| POST | `/api/courses/:slug/materials` | `{ categoryId, bookSlug, unitNumber, title, url, description }` (http/https; `bookSlug` obrigatório no My English Journey e proibido nos outros cursos) → 201 |
+| PUT/DELETE | `/api/courses/:slug/materials/:id` | Editar / excluir (404 se não for do usuário ou do curso) |
+| POST | `/api/courses/:slug/material-categories` | `{ name }` cria categoria personalizada (409 se repetida) |
+| PUT/DELETE | `/api/courses/:slug/material-categories/:id` | Renomear / excluir. As padrão são protegidas (403) e categoria com materiais não é excluída (409 `CATEGORY_IN_USE`) |
+| GET | `/api/study` | Conteúdos de Estudo: 4 níveis → unidades (com título) → assuntos (`id`, `category`, `title`, `completed`), com `progress` `{ completed, total, percent }` por unidade, nível e total |
+| PUT | `/api/study/topics/:id` | `{ completed: true|false }` marca/desmarca um assunto (idempotente) e devolve `topic` e `progress` `{ unit, book, overall }`. 404 `TOPIC_NOT_FOUND` se o id não existir |
 | GET | `/api/progress/overview` | 64 unidades, unidades completas, 128 atividades, % geral, livro atual |
 | GET | `/api/backup/export` | Backup JSON (versão 2: `completedUnits` = Student's Book e `workbookCompletedUnits`) |
 | POST | `/api/backup/import[?dryRun=true]` | Valida (e, sem `dryRun`, substitui os dados dos livros do arquivo). Aceita backups v1 (sem Workbook): o Workbook existente é preservado |
@@ -200,12 +229,16 @@ cd backend
 npm test
 ```
 
-57 testes (`node:test`) cobrindo: cálculo de progresso (0, 1, 4, 8, 12, 16 unidades de cada material nos 4 livros; nível com 32 conclusões; unidade completa só com Student's Book + Workbook), migração 003 sobre dados existentes, marcar/desmarcar, persistência e "outro dispositivo", validações e códigos HTTP, autenticação (sem token, expirado, forjado, `alg=none`, limite de tentativas), materiais, anotações, backup (ida e volta, dry-run, arquivos inválidos), CORS, migrations idempotentes, restrições do banco, paridade do cálculo frontend/backend e varredura de segredos no `docs/`.
+93 testes (`node:test`) cobrindo: cálculo de progresso (0, 1, 4, 8, 12, 16 unidades de cada material nos 4 livros; nível com 32 conclusões; unidade completa só com Student's Book + Workbook), migração 003 sobre dados existentes, marcar/desmarcar, persistência e "outro dispositivo", validações e códigos HTTP, autenticação (sem token, expirado, forjado, `alg=none`, limite de tentativas), materiais, anotações, backup (ida e volta, dry-run, arquivos inválidos), CORS, migrations idempotentes, restrições do banco, paridade do cálculo frontend/backend e varredura de segredos no `docs/`. Conteúdos de Estudo: 64 unidades com título e assuntos, marcar/desmarcar/persistir, porcentagens (8 de 10 = 80%), independência em relação aos livros nos dois sentidos, isolamento por usuário, validações, migrations 004/005 sobre um banco já com progresso, e backup com/sem `studyTopics`. Meus Estudos: lista de cursos sem percentuais fixos, progresso real do inglês, curso de aulas (0% sem conteúdo; 25% com 1 de 4 aulas), independência entre cursos e entre Conteúdos de Estudo e o curso de inglês, isolamento por usuário, 404/401/validações e a migration 006 sobre um banco já com progresso. Materiais de Estudo: nada pré-cadastrado, cadastro/edição/exclusão, validações (URL http/https, nível e unidade), ordenação por unidade, categorias padrão e personalizadas (duplicadas, proteção, em uso), isolamento entre cursos e entre usuários, independência do progresso e migration 007 sobre dados existentes. A interface foi verificada em navegador (Edge headless), incluindo o menu superior, o cadastro e a persistência de materiais, filtros e pesquisa e o fluxo login → Meus Estudos → curso → voltar → sair → login e o layout em 390 px: abas, checkboxes, recarregar, sair e entrar, filtros, rollback em falha de gravação, cor `#fed353` e layout em 390 px.
 
 Os testes de API usam `pg-mem` (PostgreSQL em memória). Além disso, o fluxo completo foi verificado manualmente contra um **PostgreSQL 16 real** e a interface em navegador (desktop, celular 390 px, teclado, modo escuro, falha de rede com rollback, exportar/importar backup).
 
 ## Limitações e pendências
 
+- **Materiais de Estudo:** ainda não entram no backup JSON (exportar/importar). Ao editar um material não é possível trocar o curso dele (exclua e cadastre no outro curso). Categorias personalizadas valem por curso e para todos os níveis do curso.
+- **Make 10 Hundred:** módulos e aulas ainda não foram fornecidos, então nada foi cadastrado. O progresso desse curso ainda não entra no backup JSON.
+- A imagem de referência da tela Meus Estudos não estava disponível; o layout segue a descrição (cards azuis empilhados). Cores em `--course-bg` no topo de `docs/css/styles.css`.
+- **Conteúdos de Estudo:** só Gramática, Vocabulário e Comunicação, conforme a lista fornecida. Listening, Reading, Writing e Pronunciation estão pendentes de confirmação com os materiais oficiais de cada unidade. Os assuntos foram separados a partir do texto da lista; revise a redação se quiser outro nível de detalhe.
 - As anotações por livro foram removidas da interface; a API (`/notes`) e o backup ainda as suportam.
 - Aplicação de usuário único; o frontend não tem tela para trocar a senha (altere `ADMIN_PASSWORD` e reinicie).
 - Token em `localStorage` (trade-off descrito acima); não há revogação individual de tokens além de trocar `JWT_SECRET` (invalida todos).

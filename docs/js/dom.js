@@ -28,6 +28,8 @@ export function append(parent, children) {
 
 const ICONS = {
   chevron: 'M6 9l6 6 6-6',
+  back: 'M15 18l-6-6 6-6',
+  up: 'M6 15l6-6 6 6',
   sun: 'M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4M12 8a4 4 0 100 8 4 4 0 000-8z',
   moon: 'M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z',
   settings: 'M4 7h10M18 7h2M4 17h2M10 17h10M16 4v6M8 14v6',

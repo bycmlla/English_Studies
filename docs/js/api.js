@@ -164,6 +164,33 @@ export const listBooks = () => request('/api/books').then((d) => d.books);
 export const setUnit = (slug, number, bookType, completed) =>
   request(`${book(slug)}/units/${number}`, { method: 'PUT', body: { completed, bookType } });
 
+// Meus Estudos: cursos, módulos e aulas (progresso independente por curso).
+export const listCourses = () => request('/api/courses').then((d) => d.courses);
+export const getCourse = (slug) => request(`/api/courses/${encodeURIComponent(slug)}`).then((d) => d.course);
+export const setCourseLesson = (slug, lessonId, completed) =>
+  request(`/api/courses/${encodeURIComponent(slug)}/lessons/${lessonId}`, { method: 'PUT', body: { completed } });
+
+// Materiais de Estudo: links de apoio por curso (nível/unidade opcionais) e categorias.
+const courseApi = (slug) => `/api/courses/${encodeURIComponent(slug)}`;
+export const getCourseMaterials = (slug) => request(`${courseApi(slug)}/materials`);
+export const createCourseMaterial = (slug, data) =>
+  request(`${courseApi(slug)}/materials`, { method: 'POST', body: data, retry: false }).then((d) => d.material);
+export const updateCourseMaterial = (slug, id, data) =>
+  request(`${courseApi(slug)}/materials/${id}`, { method: 'PUT', body: data }).then((d) => d.material);
+export const deleteCourseMaterial = (slug, id) =>
+  request(`${courseApi(slug)}/materials/${id}`, { method: 'DELETE', retry: false });
+export const createMaterialCategory = (slug, name) =>
+  request(`${courseApi(slug)}/material-categories`, { method: 'POST', body: { name }, retry: false }).then((d) => d.category);
+export const renameMaterialCategory = (slug, id, name) =>
+  request(`${courseApi(slug)}/material-categories/${id}`, { method: 'PUT', body: { name } }).then((d) => d.category);
+export const deleteMaterialCategory = (slug, id) =>
+  request(`${courseApi(slug)}/material-categories/${id}`, { method: 'DELETE', retry: false });
+
+// Conteúdos de Estudo: independentes do progresso de Student's Book / Workbook.
+export const getStudy = () => request('/api/study');
+export const setStudyTopic = (topicId, completed) =>
+  request(`/api/study/topics/${topicId}`, { method: 'PUT', body: { completed } });
+
 export const listMaterials = (slug) => request(`${book(slug)}/materials`).then((d) => d.materials);
 export const createMaterial = (slug, data) =>
   request(`${book(slug)}/materials`, { method: 'POST', body: data }).then((d) => d.material);
